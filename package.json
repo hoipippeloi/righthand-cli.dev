@@ -1,0 +1,42 @@
+{
+  "name": "righthand",
+  "version": "0.0.1",
+  "description": "The coding agent's always-available operations right-hand.",
+  "license": "UNLICENSED",
+  "author": "creatuluw",
+  "homepage": "https://github.com/creatuluw/righthand.cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/creatuluw/righthand.cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/creatuluw/righthand.cli/issues"
+  },
+  "keywords": [
+    "cli",
+    "ai",
+    "agent",
+    "llm",
+    "devops",
+    "ci-cd",
+    "mcp",
+    "coding-agent",
+    "developer-tools"
+  ],
+  "type": "module",
+  "bin": {
+    "righthand": "./bin/righthand.ts"
+  },
+  "scripts": {
+    "righthand": "node ./bin/righthand.ts",
+    "test": "node --test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "citty": "^0.1.6",
+    "isomorphic-git": "^1.40.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

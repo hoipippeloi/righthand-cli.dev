@@ -1,0 +1,16 @@
+# secrets — never commit
+.env
+.env.*
+!.env.example
+
+# dependencies
+node_modules/
+
+# righthand's own runtime footprint (local state; recreated by `righthand init`)
+.righthand/
+
+# pi agent session/config state (machine-local)
+.pi/
+
+# scratch & build artifacts
+.work/

@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>righthand — the coding agent's operations right-hand</title>
+<style>
+  :root {
+    --ivory:   #FAF9F5;
+    --slate:   #141413;
+    --clay:    #D97757;
+    --oat:     #E3DACC;
+    --olive:   #788C5D;
+    --gray-150:#F0EEE6;
+    --gray-300:#D1CFC5;
+    --gray-500:#87867F;
+    --gray-700:#3D3D3A;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans:  system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--ivory);
+    color: var(--gray-700);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    padding: 48px 24px 120px;
+  }
+  .page { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 200px minmax(0,1fr); gap: 48px; }
+  @media (max-width: 920px) { .page { grid-template-columns: 1fr; } nav { display: none; } }
+
+  /* toolbar */
+  .toolbar { position: fixed; top: 14px; right: 18px; display: flex; gap: 8px; z-index: 50; }
+  .toolbar button {
+    appearance: none; border: 1.5px solid var(--gray-300); background: #fff; color: var(--gray-700);
+    font-family: var(--mono); font-size: 11px; padding: 6px 10px; border-radius: 8px; cursor: pointer;
+  }
+  .toolbar button:hover { border-color: var(--slate); color: var(--slate); }
+
+  /* nav */
+  nav { position: sticky; top: 32px; align-self: start; font-size: 13px; }
+  nav .label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px; }
+  nav a { display: block; padding: 5px 0 5px 12px; border-left: 2px solid var(--gray-300); color: var(--gray-700); text-decoration: none; }
+  nav a:hover { color: var(--slate); border-color: var(--slate); }
+  nav .files { margin-top: 28px; border-top: 1px solid var(--gray-300); padding-top: 16px; }
+  nav .files code { display: block; font-family: var(--mono); font-size: 11px; color: var(--gray-500); padding: 3px 0; }
+
+  /* header */
+  header { margin-bottom: 12px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gray-500); margin-bottom: 10px; }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 34px; color: var(--slate); letter-spacing: -0.01em; margin-bottom: 6px; }
+  .tagline { font-family: var(--serif); font-size: 17px; color: var(--gray-500); margin-bottom: 16px; }
+  .tldr { border: 1.5px solid var(--gray-300); border-left: 3px solid var(--clay); border-radius: 10px; background: #fff; padding: 16px 18px; }
+  .tldr b { color: var(--slate); }
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .pill { font-family: var(--mono); font-size: 11px; color: var(--gray-700); background: var(--gray-150); border: 1px solid var(--gray-300); padding: 4px 9px; border-radius: 20px; }
+
+  h2 { font-family: var(--serif); font-weight: 500; font-size: 22px; color: var(--slate); margin: 44px 0 14px; scroll-margin-top: 24px; }
+  h3 { font-family: var(--serif); font-weight: 500; font-size: 17px; color: var(--slate); margin: 22px 0 8px; }
+  p { margin-bottom: 12px; max-width: 680px; }
+  ul { padding-left: 20px; max-width: 680px; }
+  ul li { margin-bottom: 8px; }
+  code { font-family: var(--mono); font-size: 13px; }
+  a { color: var(--clay); }
+
+  /* command table */
+  table { border-collapse: collapse; width: 100%; max-width: 760px; margin: 8px 0 16px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--gray-300); vertical-align: top; }
+  th { font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--gray-500); }
+  td code { color: var(--slate); }
+
+  /* collapsible */
+  details { border: 1.5px solid var(--gray-300); border-radius: 10px; background: #fff; margin: 12px 0; overflow: hidden; }
+  summary { list-style: none; cursor: pointer; padding: 14px 16px; font-family: var(--serif); font-size: 16px; color: var(--slate); display: flex; align-items: baseline; gap: 10px; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "▸"; color: var(--clay); font-family: var(--sans); font-size: 12px; transition: transform 120ms; }
+  details[open] summary::before { transform: rotate(90deg); }
+  summary .where { font-family: var(--mono); font-size: 11px; color: var(--gray-500); margin-left: auto; }
+  details .body { padding: 0 16px 16px; }
+  details .body p { font-size: 14px; }
+
+  /* tabs */
+  .tabs { border: 1.5px solid var(--gray-300); border-radius: 10px; background: #fff; margin: 16px 0 8px; overflow: hidden; }
+  .tabbar { display: flex; border-bottom: 1px solid var(--gray-300); background: var(--gray-150); flex-wrap: wrap; }
+  .tabbar button { appearance: none; border: none; background: none; font-family: var(--mono); font-size: 12px; color: var(--gray-500); padding: 10px 16px; cursor: pointer; border-right: 1px solid var(--gray-300); }
+  .tabbar button.on { background: #fff; color: var(--slate); border-bottom: 2px solid var(--clay); margin-bottom: -1px; }
+  .tabs pre { display: none; margin: 0; padding: 16px 18px; font-family: var(--mono); font-size: 12.5px; line-height: 1.6; color: var(--slate); overflow-x: auto; white-space: pre; }
+  .tabs pre.on { display: block; }
+  .hl { color: var(--clay); }
+  .cm { color: var(--gray-500); }
+
+  /* callout */
+  .callout { display: flex; gap: 12px; border: 1.5px solid var(--oat); background: rgba(227,218,204,0.35); border-radius: 10px; padding: 14px 16px; margin: 18px 0; font-size: 14px; }
+  .callout .ico { color: var(--clay); font-weight: 600; }
+
+  /* diagram */
+  .diagram-panel { position: relative; border: 1.5px solid var(--gray-300); border-radius: 10px; background: var(--ivory); overflow: hidden; margin: 16px 0 6px; }
+  .diagram-viewport { height: 560px; overflow: hidden; cursor: grab; background: var(--ivory); position: relative; }
+  .diagram-viewport:active { cursor: grabbing; }
+  .diagram-viewport svg { width: 873px; height: 2484px; transform-origin: 0 0; display: block; }
+  .fs-btn { position: absolute; top: 8px; right: 8px; z-index: 3; appearance: none; border: 1.5px solid var(--gray-300); background: #fff; width: 30px; height: 30px; border-radius: 8px; cursor: pointer; font-size: 14px; color: var(--gray-700); line-height: 1; }
+  .fs-btn:hover { border-color: var(--slate); }
+  .fs-btn.reset { right: 44px; }
+  .diagram-panel.fs { position: fixed; inset: 0; z-index: 100; border-radius: 0; border: none; }
+  .diagram-panel.fs .diagram-viewport { height: calc(100vh - 0px); }
+  .caption { font-family: var(--mono); font-size: 11px; color: var(--gray-500); margin-bottom: 8px; }
+
+  /* faq */
+  dl.faq dt { font-family: var(--serif); font-size: 16px; color: var(--slate); margin-top: 18px; }
+  dl.faq dd { font-size: 14px; margin: 4px 0 0; max-width: 640px; }
+
+  /* dark mode — page chrome only; diagram panel stays light so the SVG stays legible */
+  @media (prefers-color-scheme: dark) {
+    body { background: #15171a; color: #c9d1d9; }
+    h1, h2, h3, summary { color: #f0f6fc; }
+    .tagline { color: #8b949e; }
+    .tldr, details, .tabs, .callout { background: #1c2128; border-color: #30363d; }
+    .tldr b { color: #f0f6fc; }
+    .tabbar { background: #161b22; border-color: #30363d; }
+    .tabbar button { color: #8b949e; border-color: #30363d; }
+    .tabbar button.on { background: #1c2128; color: #f0f6fc; }
+    .tabs pre { color: #f0f6fc; }
+    nav a { color: #c9d1d9; border-color: #30363d; }
+    nav .files { border-color: #30363d; }
+    th, td { border-color: #30363d; }
+    .toolbar button, .fs-btn { background: #1c2128; color: #c9d1d9; border-color: #30363d; }
+    .pill { background: #21262d; border-color: #30363d; color: #c9d1d9; }
+    .diagram-panel { background: var(--ivory); border-color: #30363d; }
+  }
+
+  /* print */
+  @media print {
+    .toolbar, nav, .fs-btn { display: none !important; }
+    .page { grid-template-columns: 1fr; }
+    body { padding: 0; background: #fff; }
+    .diagram-panel { border: 1px solid #ccc; }
+    .diagram-viewport { height: auto; }
+    .diagram-viewport svg { transform: none; width: 60%; height: auto; margin: 0 auto; }
+    details { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <button onclick="window.print()">⎙ Print</button>
+</div>
+
+<div class="page">
+
+  <!-- nav -->
+  <nav>
+    <div class="label">On this page</div>
+    <a href="#tldr">TL;DR</a>
+    <a href="#how">How it works</a>
+    <a href="#operate">Operate it</a>
+    <a href="#commands">Commands</a>
+    <a href="#config">Configure</a>
+    <a href="#enhance">Enhance it</a>
+    <a href="#when">When to use</a>
+    <a href="#faq">FAQ</a>
+    <div class="files">
+      <div class="label">Key files</div>
+      <code>src/runtime.ts</code>
+      <code>src/contracts.ts</code>
+      <code>src/capabilities.ts</code>
+      <code>src/llm.ts</code>
+      <code>src/commands/*.ts</code>
+    </div>
+  </nav>
+
+  <!-- main -->
+  <main>
+    <header>
+      <div class="eyebrow">README · feature summary</div>
+      <h1>righthand</h1>
+      <div class="tagline">The coding agent's always-available operations right-hand.</div>
+      <div class="tldr" id="tldr">
+        <b>TL;DR</b> — A standalone CLI that any AI coding agent (Claude Code, Cursor, Copilot, Aider, pi…) shells out to <b>per task</b> to offload everything that isn't writing code: CI/CD, logs, docs, tasks, admin, web research. It returns a <b>compressed, schema'd JSON result</b>, keeping the agent's context window free for code. It can use an <b>LLM itself</b> and even <b>write new commands into its own surface</b> — safely, with full rollback.
+        <div class="pills">
+          <span class="pill">Node 24 / Bun</span>
+          <span class="pill">no build step</span>
+          <span class="pill">~115ms cold-start</span>
+          <span class="pill">deps: citty + isomorphic-git</span>
+          <span class="pill">173 tests</span>
+        </div>
+      </div>
+    </header>
+
+    <h2 id="how">How it works</h2>
+    <p>Every call is a fresh subprocess: righthand loads config, discovers the command (reading manifest JSON only — no handler code), gates it through the capability sandbox and an approval gate, runs the handler (wrapping CLIs and/or calling its own LLM), compresses the result, journals any mutation, and emits one bounded envelope. Drag to pan, scroll to zoom, double-click to reset, ⛶ to fullscreen.</p>
+
+    <div class="diagram-panel" id="flow">
+      <button class="fs-btn reset" title="Reset view" onclick="resetView('flow')">↺</button>
+      <button class="fs-btn" title="Fullscreen" onclick="toggleFs('flow')">⛶</button>
+      <div class="diagram-viewport">
+<svg font-family="system-ui,-apple-system,sans-serif" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 872.98 2483.75" width="872.98" height="2483.75">
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="4.8" refX="8" refY="2.4" orient="auto"><polygon points="0 0, 8 2.4, 0 4.8" fill="#0969da"/></marker>
+</defs>
+<rect x="365.7" y="40" width="290.5" height="112" fill="#ffffff" stroke="#d2d3d4" stroke-width="1"/>
+<rect x="365.7" y="40" width="290.5" height="28" fill="#f3f3f4" stroke="#d2d3d4" stroke-width="1"/>
+<text x="377.7" y="54" dy="0.35em" font-size="12" font-weight="600" fill="#59636e">Coding agent — any LLM</text>
+<rect x="294.2" y="196" width="538.78" height="2247.75" fill="#ffffff" stroke="#d2d3d4" stroke-width="1"/>
+<rect x="294.2" y="196" width="538.78" height="28" fill="#f3f3f4" stroke="#d2d3d4" stroke-width="1"/>
+<text x="306.2" y="210" dy="0.35em" font-size="12" font-weight="600" fill="#59636e">righthand · spawned per task, stateless</text>
+<polyline points="510.95,132 510.95,252" fill="none" stroke="#d1d9e0" stroke-width="0.75" marker-end="url(#arrowhead)"/>
+<polyline points="510.95,288 510.95,408" fill="none" stroke="#d1d9e0" stroke-width="0.75" marker-end="url(#arrowhead)"/>
+<polyline points="510.95,444 510.95,564" fill="none" stroke="#d1d9e0" stroke-width="0.75" marker-end="url(#arrowhead)"/>
+<polyline points="510.95,600 510.95,720" fill="none" stroke="#d1d9e0" stroke-width="0.75" marker-end="url(#arrowhead)"/>
+<polyline points="471.5,851 471.5,910.4 420.3,910.4 420.3,1137.6 272.2,1137.6" fill="none" stroke="#d1d9e0" stroke-width="0.75" marker-end="url(#arrowhead)"/>
+<polyline points="528.3,873 528.3,910.4 537.8,910.4 537.8,1027.4" fill="none" stroke="#d1d9e0" stroke-width="0.75" marker-end="url(#arrowhead)"/>
+<polyline points="494.3,1204 494.3,1267.8 452.9,1267.8 452.9,1505.8 272.2,1505.8" fill="none" stroke="#d1d9e0" stroke-width="0.75" marker-end="url(#arrowhead)"/>
+<polyline points="559.1,1226.6 559.1,1267.8 569,1267.8 569,1384.8" fill="none" stroke="#d1d9e0" stroke-width="0.75" marker-end="url(#arrowhead)"/>
+<polyline points="527,1584.8 527,1646.8 494.1,1646.8 494.1,1781.8 272.2,1781.8" fill="none" stroke="#d1d9e0" stroke-width="0.75" marker-end="url(#arrowhead)"/>
+<polyline points="601.9,1593.9 601.9,1646.8 621.6,1646.8 621.6,1763.8" fill="none" stroke="#d1d9e0" stroke-width="0.75" marker-end="url(#arrowhead)"/>
+<polyline points="621.6,1799.8 621.6,1919.8" fill="none" stroke="#d1d9e0" stroke-width="0.75" marker-end="url(#arrowhead)"/>
+<polyline points="621.6,1955.8 621.6,2075.8" fill="none" stroke="#d1d9e0" stroke-width="0.75" marker-end="url(#arrowhead)"/>
+<polyline points="621.6,2111.8 621.6,2231.8" fill="none" stroke="#d1d9e0" stroke-width="0.75" marker-end="url(#arrowhead)"/>
+<polyline points="621.6,2267.8 621.6,2387.8" fill="none" stroke="#d1d9e0" stroke-width="0.75" marker-end="url(#arrowhead)"/>
+<rect x="400.9" y="945.4" width="38.9" height="27" rx="4" fill="#ffffff" stroke="#e4e4e5" stroke-width="0.5"/><text x="420.3" y="958.9" text-anchor="middle" dy="0.35em" font-size="11" fill="#59636e">no</text>
+<rect x="515.5" y="945.4" width="44.6" height="27" rx="4" fill="#ffffff" stroke="#e4e4e5" stroke-width="0.5"/><text x="537.8" y="958.9" text-anchor="middle" dy="0.35em" font-size="11" fill="#59636e">yes</text>
+<rect x="422" y="1302.8" width="61.8" height="27" rx="4" fill="#ffffff" stroke="#e4e4e5" stroke-width="0.5"/><text x="452.9" y="1316.3" text-anchor="middle" dy="0.35em" font-size="11" fill="#59636e">denied</text>
+<rect x="549.5" y="1302.8" width="38.9" height="27" rx="4" fill="#ffffff" stroke="#e4e4e5" stroke-width="0.5"/><text x="569" y="1316.3" text-anchor="middle" dy="0.35em" font-size="11" fill="#59636e">ok</text>
+<rect x="443.2" y="1681.8" width="101.8" height="27" rx="4" fill="#ffffff" stroke="#e4e4e5" stroke-width="0.5"/><text x="494.1" y="1695.3" text-anchor="middle" dy="0.35em" font-size="11" fill="#59636e">yes, no --yes</text>
+<rect x="579.3" y="1681.8" width="84.6" height="27" rx="4" fill="#ffffff" stroke="#e4e4e5" stroke-width="0.5"/><text x="621.6" y="1695.3" text-anchor="middle" dy="0.35em" font-size="11" fill="#59636e">no / --yes</text>
+<rect x="125.8" y="1119.6" width="146.4" height="36" rx="18" fill="#F5D5CC" stroke="#B5495B" stroke-width="1.5"/>
+<rect x="40" y="1487.8" width="232.2" height="36" rx="18" fill="#F5D5CC" stroke="#B5495B" stroke-width="1.5"/>
+<rect x="82.9" y="1763.8" width="189.3" height="36" rx="18" fill="#F5D5CC" stroke="#B5495B" stroke-width="1.5"/>
+<rect x="387.7" y="96" width="246.5" height="36" fill="#E3DACC" stroke="#3D3D3A" stroke-width="1.5"/>
+<rect x="437.8" y="252" width="146.4" height="36" rx="18" fill="#D1CFC5" stroke="#3D3D3A" stroke-width="1.5"/>
+<rect x="394.9" y="408" width="232.2" height="36" fill="#E3DACC" stroke="#3D3D3A" stroke-width="1.5"/>
+<rect x="316.2" y="564" width="389.5" height="36" fill="#E3DACC" stroke="#3D3D3A" stroke-width="1.5"/>
+<polygon points="510.95,720 596.15,805.2 510.95,890.4 425.75,805.2" fill="#F5E6D0" stroke="#D97757" stroke-width="1.5"/>
+<polygon points="537.8,1027.4 648.05,1137.6 537.8,1247.8 427.6,1137.6" fill="#F5E6D0" stroke="#D97757" stroke-width="1.5"/>
+<polygon points="569,1384.8 689.9,1505.8 569,1626.8 448,1505.8" fill="#F5E6D0" stroke="#D97757" stroke-width="1.5"/>
+<rect x="437.6" y="1763.8" width="368" height="36" fill="#E3DACC" stroke="#3D3D3A" stroke-width="1.5"/>
+<rect x="494.8" y="1919.8" width="253.6" height="36" fill="#E3DACC" stroke="#3D3D3A" stroke-width="1.5"/>
+<rect x="444.7" y="2075.8" width="353.8" height="36" fill="#E3DACC" stroke="#3D3D3A" stroke-width="1.5"/>
+<rect x="526.9" y="2231.8" width="189.3" height="36" fill="#E3DACC" stroke="#3D3D3A" stroke-width="1.5"/>
+<rect x="519.8" y="2387.8" width="203.6" height="36" rx="18" fill="#D1CFC5" stroke="#3D3D3A" stroke-width="1.5"/>
+<text x="199" y="1137.6" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="#1f2328">exit 2 · usage</text>
+<text x="156.1" y="1505.8" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="#1f2328">exit 6 · capability-denied</text>
+<text x="177.6" y="1781.8" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="#1f2328">exit 3 · needs_human</text>
+<text x="510.95" y="114" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="#1f2328">righthand &lt;cmd&gt; --json</text>
+<text x="510.95" y="270" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="#1f2328">spawn subprocess</text>
+<text x="510.95" y="426" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="#1f2328">load .env + layered config</text>
+<text x="510.95" y="582" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="#1f2328">discover manifest — JSON only, no handler import</text>
+<text x="510.95" y="805.2" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="#1f2328">command known?</text>
+<text x="537.8" y="1137.6" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="#1f2328">capabilities granted?</text>
+<text x="569" y="1505.8" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="#1f2328">destructive / expensive?</text>
+<text x="621.6" y="1781.8" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="#1f2328">run handler — wrap CLIs · call LLM · research</text>
+<text x="621.6" y="1937.8" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="#1f2328">compress to a bounded summary</text>
+<text x="621.6" y="2093.8" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="#1f2328">journal mutation — change_id, rollback-able</text>
+<text x="621.6" y="2249.8" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="#1f2328">append history.jsonl</text>
+<text x="621.6" y="2405.8" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="#1f2328">emit envelope · exit 0</text>
+</svg>
+      </div>
+    </div>
+    <div class="caption">The dispatch path · three short-circuits (usage / capability-denied / needs_human) map to exit codes 2 / 6 / 3.</div>
+
+    <h2 id="operate">Operate it</h2>
+    <p>Three ways in — the terminal, the web UI, or a direct agent call. Expand the quick-start tabs for each.</p>
+
+    <div class="tabs" data-tabs>
+      <div class="tabbar">
+        <button class="on" data-t="0">install</button>
+        <button data-t="1">terminal</button>
+        <button data-t="2">web UI</button>
+        <button data-t="3">agent call</button>
+      </div>
+<pre class="on"><span class="cm"># clone, install, put `righthand` on PATH</span>
+git clone &lt;repo&gt; righthand.cli &amp;&amp; cd righthand.cli
+npm install
+npm link
+
+righthand              <span class="cm"># list commands</span>
+righthand init         <span class="cm"># create ./.righthand footprint</span>
+righthand doctor       <span class="cm"># health + integration check</span></pre>
+<pre><span class="cm"># every command returns one bounded envelope; JSON when piped</span>
+$ righthand ci status
+{ "ok": true, "command": "ci", "summary": "main: 2 failed, 1 running",
+  "result": { "runs": [...] }, "needs_human": null,
+  "meta": { "duration_ms": 142, "change_id": null, "tokens_used": 0 } }
+
+$ righthand hello --needs-human ; echo $?
+{ "ok": false, ..., "needs_human": "..." }
+3</pre>
+<pre><span class="cm"># a visual runner — browse, fill a schema-generated form, run</span>
+$ righthand web
+righthand web → http://127.0.0.1:8787/
+
+<span class="cm"># the UI drives the same in-process dispatch as the CLI,</span>
+<span class="cm"># so config, capabilities, and rollback all apply.</span></pre>
+<pre><span class="cm"># MCP-aware agents enumerate once, then dispatch</span>
+$ righthand tools --json
+{ "tools": [ { "name": "ci", "description": "...", "inputSchema": {...} }, ... ] }
+
+<span class="cm"># the descriptors are MCP-shaped — any agent that speaks MCP</span>
+<span class="cm"># can call righthand without being taught.</span></pre>
+    </div>
+
+    <h2 id="commands">Commands <span style="font-family:var(--mono);font-size:12px;color:var(--gray-500);">(21, all auto-discovered)</span></h2>
+    <table>
+      <tr><th>Group</th><th>Commands</th></tr>
+      <tr><td><b>CI/CD</b></td><td><code>ci status</code> · <code>ci logs</code></td></tr>
+      <tr><td><b>Observability</b></td><td><code>logs tail</code></td></tr>
+      <tr><td><b>Docs</b></td><td><code>docs lint</code></td></tr>
+      <tr><td><b>Tasks</b></td><td><code>tasks list</code></td></tr>
+      <tr><td><b>Admin</b></td><td><code>admin env</code></td></tr>
+      <tr><td><b>LLM</b></td><td><code>llm ask "&lt;prompt&gt;"</code> · <code>research "&lt;query&gt;"</code></td></tr>
+      <tr><td><b>Self-builder</b></td><td><code>build "&lt;what it should do&gt;"</code></td></tr>
+      <tr><td><b>Extend</b></td><td><code>new &lt;name&gt;</code> · <code>plugins install|list|remove</code></td></tr>
+      <tr><td><b>System</b></td><td><code>version</code> · <code>tools</code> · <code>config</code> · <code>history</code> · <code>init</code> · <code>changes</code> · <code>rollback</code> · <code>reset</code> · <code>doctor</code> · <code>web</code></td></tr>
+    </table>
+    <p style="font-family:var(--mono);font-size:12px;color:var(--gray-500);">Exit codes: <code>0</code> ok · <code>1</code> fail · <code>2</code> usage · <code>3</code> NEEDS_HUMAN · <code>4</code> auth · <code>5</code> dep-missing · <code>6</code> capability-denied.</p>
+
+    <h2 id="config">Configure</h2>
+    <p>Layered config — <b>project</b> <code>./.righthand/config.json</code> › <b>user</b> <code>~/.righthand/config.json</code> › <b>env</b> (<code>RIGHTHAND_*</code>). A project <code>.env</code> is auto-loaded. Credentials use <code>env:</code>/<code>keychain:</code> indirection — never plaintext on disk, never in output.</p>
+
+    <div class="tabs" data-tabs>
+      <div class="tabbar">
+        <button class="on" data-t="0">config.json</button>
+        <button data-t="1">.env</button>
+      </div>
+<pre class="on"><span class="cm">// ./.righthand/config.json</span>
+{
+  "providers": {
+    "default": { "type": "openai-compatible",
+                 "baseURL": "env:CHAT_BASE_URL",
+                 "apiKey":  "env:DEEPSEEK_API_KEY",
+                 "model":   "env:CHAT_MODEL" }
+  },
+  "permissions": { "allow": ["net:llm", "fs:write"], "deny": [] },
+  "defaults": { "provider": "default" }
+}</pre>
+<pre><span class="cm"># .env at the project root — auto-loaded, never committed</span>
+DEEPSEEK_API_KEY=sk-...
+CHAT_MODEL=deepseek-chat
+CHAT_BASE_URL=https://api.deepseek.com/v1</pre>
+    </div>
+
+    <div class="callout">
+      <span class="ico">★</span>
+      <div><b>Capabilities are deny-by-default.</b> Strings <code>exec:</code> · <code>net:</code> · <code>fs:</code> · <code>llm:</code> (with <code>*</code> wildcards). Capability-gated commands (<code>ci</code>, <code>llm</code>, <code>build</code>, <code>research</code>…) are denied until you grant them in <code>permissions.allow</code>. Run <code>righthand doctor</code> to see what each command needs.</div>
+    </div>
+
+    <h2 id="enhance">Enhance it</h2>
+    <p>Four ways, <b>zero shared-file edits</b> — commands are auto-discovered. The contract is one module exporting a descriptor + a handler; the source must be <b>strip-only TypeScript</b> (no parameter properties, enums, or namespaces — Node/Bun run it with no build step).</p>
+
+    <div class="tabs" data-tabs>
+      <div class="tabbar">
+        <button class="on" data-t="0">drop in a file</button>
+        <button data-t="1">scaffold</button>
+        <button data-t="2">self-builder</button>
+        <button data-t="3">plugin</button>
+      </div>
+<pre class="on"><span class="cm">// src/commands/greet.ts  — auto-discovered</span>
+import type { ToolDescriptor, CommandContext, Envelope } from "../contracts.ts";
+import { makeEnvelope } from "../envelope.ts";
+
+export const descriptor: ToolDescriptor = {
+  name: "greet",
+  description: "Greet a name",
+  inputSchema: { type: "object",
+    properties: { name: { type: "string" } }, additionalProperties: false },
+  plugin: "@righthand/core", costTier: "free",
+};
+
+export async function run(ctx: CommandContext): Promise&lt;Envelope&gt; {
+  return makeEnvelope({
+    command: "greet",
+    summary: `hi, ${ctx.args.name ?? "world"}!`,
+    result: { name: ctx.args.name },
+  });
+}</pre>
+<pre><span class="cm"># scaffold a starter (journaled → rollback-able)</span>
+righthand new mycmd --desc "does the thing"
+
+<span class="cm"># immediately discoverable + runnable</span>
+righthand mycmd</pre>
+<pre><span class="cm"># the LLM writes + smoke-tests + installs a new command</span>
+righthand build "a command that prints the current git branch" --yes
+
+<span class="cm"># generate → validate → smoke-test → confirm → install</span>
+<span class="cm"># journaled, so `righthand rollback` undoes it.</span></pre>
+<pre><span class="cm"># a plugin is an npm package shipping a manifest.json fragment</span>
+righthand plugins install @acme/righthand-deploy
+
+<span class="cm"># { "plugin": "@acme/righthand-deploy",</span>
+<span class="cm">#   "handler": "./handler.js",</span>
+<span class="cm">#   "tools": [ { name, description, inputSchema, ... } ] }</span></pre>
+    </div>
+
+    <h2 id="when">When to use righthand best</h2>
+    <ul>
+      <li><b>An agent keeps stalling on ops</b> — CI, deploys, logs, issues. Hand the task to righthand; get a one-line answer back.</li>
+      <li><b>Context bloat is hurting the agent's code work</b> — let righthand do the noisy I/O and return only the summary.</li>
+      <li><b>You want one universal, agent-invokable ops surface</b> instead of N MCP servers or raw <code>gh</code>/<code>kubectl</code> incantations.</li>
+      <li><b>You want to grow the tool with the agent</b> — the self-builder writes new commands on demand, and rollback keeps it safe.</li>
+    </ul>
+    <div class="callout">
+      <span class="ico">✕</span>
+      <div><b>And when not:</b> righthand is a right-hand, not a coding agent — it doesn't edit your application source unless a command is explicitly scoped to. It shines for <i>operational</i> delegation.</div>
+    </div>
+
+    <h2 id="faq">FAQ</h2>
+    <dl class="faq">
+      <dt>How does an agent actually call it?</dt>
+      <dd>It shells out: <code>righthand &lt;cmd&gt; [args] --json</code>. MCP-aware agents first read <code>righthand tools --json</code> for the descriptor list, then dispatch — no host registration or MCP server required.</dd>
+
+      <dt>Is anything the agent does permanent?</dt>
+      <dd>No. Every mutation is journaled as a before/after snapshot in an internal <code>isomorphic-git</code> store. <code>righthand rollback</code> undoes the last change (or N, or by id); <code>righthand reset</code> factory-resets a scope with an undo manifest. It never touches your application code.</dd>
+
+      <dt>Why deny-by-default capabilities?</dt>
+      <dd>righthand wraps real CLIs and calls real LLMs (which cost money and can exfiltrate). Each command declares what it needs (<code>exec:gh</code>, <code>net:llm</code>, …) and dispatch refuses to run it until you grant it. <code>righthand doctor</code> lists what's missing.</dd>
+
+      <dt>Does the web UI respect all that?</dt>
+      <dd>Yes — it runs commands through the same in-process dispatch as the CLI, so config, capabilities, rollback, and history all apply identically.</dd>
+    </dl>
+  </main>
+</div>
+
+<script>
+  // tabs
+  document.querySelectorAll("[data-tabs]").forEach(box => {
+    const btns = box.querySelectorAll(".tabbar button");
+    const panes = box.querySelectorAll("pre");
+    btns.forEach(b => b.addEventListener("click", () => {
+      btns.forEach(x => x.classList.remove("on"));
+      panes.forEach(x => x.classList.remove("on"));
+      b.classList.add("on");
+      panes[+b.dataset.t].classList.add("on");
+    }));
+  });
+
+  // diagram: drag-pan, wheel-zoom, reset, fullscreen (vanilla, zero deps)
+  const states = {};
+  function initDiagram(id) {
+    const panel = document.getElementById(id);
+    const vp = panel.querySelector(".diagram-viewport");
+    const svg = vp.querySelector("svg");
+    const st = { s: 1, x: 0, y: 0, drag: false, lx: 0, ly: 0 };
+    states[id] = st;
+    const apply = () => { svg.style.transform = `translate(${st.x}px,${st.y}px) scale(${st.s})`; };
+    const fit = () => {
+      const natH = svg.viewBox.baseVal.height || 2484;
+      const natW = svg.viewBox.baseVal.width || 873;
+      st.s = (vp.clientHeight / natH) * 0.98;
+      st.x = Math.max(0, (vp.clientWidth - natW * st.s) / 2);
+      st.y = 0;
+      apply();
+    };
+    vp.addEventListener("mousedown", e => { st.drag = true; st.lx = e.clientX; st.ly = e.clientY; });
+    window.addEventListener("mousemove", e => {
+      if (!st.drag) return;
+      st.x += e.clientX - st.lx; st.y += e.clientY - st.ly; st.lx = e.clientX; st.ly = e.clientY;
+      apply();
+    });
+    window.addEventListener("mouseup", () => st.drag = false);
+    vp.addEventListener("wheel", e => {
+      e.preventDefault();
+      st.s = Math.max(0.1, Math.min(6, st.s * (e.deltaY < 0 ? 1.12 : 0.89)));
+      apply();
+    }, { passive: false });
+    vp.addEventListener("dblclick", fit);
+    fit();
+  }
+  function resetView(id) { const vp = document.getElementById(id).querySelector(".diagram-viewport"); const svg = vp.querySelector("svg"); const st = states[id]; const natH = svg.viewBox.baseVal.height || 2484; const natW = svg.viewBox.baseVal.width || 873; st.s = (vp.clientHeight / natH) * 0.98; st.x = Math.max(0,(vp.clientWidth - natW*st.s)/2); st.y = 0; svg.style.transform = `translate(${st.x}px,${st.y}px) scale(${st.s})`; }
+  function toggleFs(id) {
+    const panel = document.getElementById(id);
+    panel.classList.toggle("fs");
+    setTimeout(() => { resetView(id); }, 50);
+  }
+  initDiagram("flow");
+</script>
+</body>
+</html>

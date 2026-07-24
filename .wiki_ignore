@@ -1,0 +1,10 @@
+# .wiki_ignore — files/dirs excluded from staleness detection
+# Add project-specific patterns below. Lines starting with # are comments.
+
+node_modules/
+dist/
+build/
+.next/
+.cache/
+__pycache__/
+.DS_Store
