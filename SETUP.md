@@ -30,9 +30,10 @@ command -v righthand      # present? prints a path if installed
 If Step 0 showed `righthand` on PATH, **skip to Step 2.** Otherwise install it from GitHub:
 
 ```bash
-npm install -g hoipippeloi/righthand-cli.dev
-# equivalent explicit form:
-# npm install -g https://github.com/hoipippeloi/righthand-cli.dev.git
+npm install -g https://github.com/hoipippeloi/righthand-cli.dev/tarball/main
+# Use the GitHub *tarball* URL, not the `owner/repo` git shorthand — npm's global
+# git-dependency install is buggy (npm/cli#3692: it deletes the clone → dangling
+# symlink → `righthand: command not found`). The tarball URL installs normally.
 ```
 
 To develop on righthand itself, clone + link instead:

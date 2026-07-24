@@ -16,7 +16,7 @@ Node 24+ / Bun · no build step (native TS type-stripping) · only runtime deps:
 ## Quick start
 
 ```bash
-npm install -g hoipippeloi/righthand-cli.dev   # install from GitHub
+npm install -g https://github.com/hoipippeloi/righthand-cli.dev/tarball/main   # GitHub tarball
 
 righthand                    # list commands
 righthand tools --json       # MCP-shaped discovery (what an agent calls)

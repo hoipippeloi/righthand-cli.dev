@@ -15,10 +15,10 @@ When NOT to use it: editing application source, reading code to reason about it,
 ## Install
 
 ```bash
-npm install -g hoipippeloi/righthand-cli.dev      # from GitHub
+npm install -g https://github.com/hoipippeloi/righthand-cli.dev/tarball/main   # GitHub tarball — not the `owner/repo` git shorthand (npm/cli#3692)
 ```
 
-Requires Node 20+ (24+ recommended). Runtime deps: `citty` + `isomorphic-git` (auto-builds to JS on install). Verify:
+Requires Node 20+ (24+ recommended). Ships prebuilt JS (committed `dist/`); runtime deps: `citty` + `isomorphic-git`. Verify:
 
 ```bash
 righthand version          # → righthand 0.0.1
