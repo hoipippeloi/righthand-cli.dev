@@ -6,4 +6,5 @@ _Concrete named things will be listed here._
 y point — `complete()` —
 - [plugins command](./plugins-command.md) - What it is
 - [doctor command](./doctor-command.md) - **`righthand doctor`** is the read-only health & integration diagnostics command (capability [[c10-diagnostics]] / `decisions/diagnostics-command-righthand-doct
-- [web command](./web-command.md) - **`righthand web`** is the command that launches the visual command-runner webapp. It is a long-running **foreground** command: it starts a stdlib HTTP server, 
+- [web command](./web-command.md) - **`righthand web`** is the command that launches the visual command-runner webapp. It is a long-running **foreground** command: it starts a stdlib HTTP server,
+- [Publish build pipeline](./publish-build-pipeline.md) - **The publish build pipeline** compiles the TypeScript source in `src/` into ESM JavaScript in `dist/` at publish time, so the published npm package's `bin` is 

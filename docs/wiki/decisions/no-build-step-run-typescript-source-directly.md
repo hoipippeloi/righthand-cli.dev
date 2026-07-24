@@ -36,6 +36,10 @@ The runtime was locked to Node + TypeScript ([[node-typescript-is-the-runtime-fo
 - `tsc --noEmit` becomes a *lint/typecheck* tool, not a build tool.
 - This **refines the build-tooling consequence** of [[node-typescript-is-the-runtime-for-righthand]] (which named `tsc`/`esbuild`); it supersedes that one line — the Node+TS runtime choice itself is unchanged.
 
+## Refinement (publish path) — 2026-07-24
+
+"No build step" applies to the **development / runtime-from-source** experience and is unchanged there. It does **not** cover the published npm artifact: Node deliberately disables type-stripping for any `.ts` under `node_modules` ([[err-unsupported-node-modules-type-stripping-published-bin-must-be-js-never-ts]]), so the package's `bin` must ship compiled `.js`. That is built at publish time via `npm prepare` (esbuild, devDep-only) into `dist/` — **this decision is clarified, not superseded, by** [[publish-time-build-to-dist-via-npm-prepare-compiled-js-for-n]]. Both are true at once: dev runs source directly; the npm install runs compiled JS. See also [[publish-build-pipeline]] for the mechanism.
+
 ## Verified (Phase 0 slice, 2026-07-24)
 
-`bin/righthand.ts` runs directly under Node 24 with zero build step; 8/8 `node --test` tests green; cold-start 94ms (under the 200ms C1 target).
+`bin/righthand.ts` runs directly under Node 24 with zero build step; 8/8 `node --test` tests green; cold-start 94ms (under the 200ms C1 target). (Later baselines: ~115ms once full discovery was wired, ~80ms for the compiled `dist/` artifact.)

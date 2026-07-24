@@ -27,8 +27,8 @@ Compiler is **esbuild, per-file (not bundled)**, with a scoped `.ts`→`.js` spe
 
 ## Consequences
 
-- `npm install -g hoipippeloi/righthand-cli.dev` now works.
+- `npm install -g https://github.com/hoipippeloi/righthand-cli.dev/tarball/main` works (the GitHub **tarball** URL). ⚠️ The `owner/repo` git shorthand does NOT work for *global* installs — npm's git-dep flow is buggy (npm/cli#3692, npm 7–11): it clones to a temp dir, runs `prepare`, then deletes the clone + install dir → dangling symlink → `command not found`. See [[npm-git-dependency-on-windows-installs-as-a-symlink-to-a-del]].
 - Zero new runtime deps. esbuild is devDep-only.
 - Cold start *improved*: ~80ms median (vs ~115ms source) — compiled JS skips type-stripping.
-- Adds `scripts/build.mjs` + `prepare`/`build` npm scripts + a `dist/` gitignored artifact.
+- Adds `scripts/build.mjs` + `prepare`/`build` npm scripts. **`dist/` is COMMITTED** (un-gitignored) so the GitHub tarball ships runnable JS — a tarball-URL install needs no build step at all and survives `--omit=dev` / `--ignore-scripts`. (Future clean path: publish to the npm registry.)
 - Clarifies (does NOT supersede) [[no-build-step-run-typescript-source-directly]]: "no build step" applies to the **development/runtime-from-source** experience; the **published npm artifact** is compiled JS. Both are true simultaneously.

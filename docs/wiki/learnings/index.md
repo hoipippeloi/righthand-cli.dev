@@ -17,3 +17,4 @@ _Captured learnings will be listed here._
 - [config set must JSON-coerce arrays/objects — the layered merge silently drops wrong-typed values](./config-set-must-json-coerce-arrays-objects-the-layered-merge.md) - What happened
 - [.righthand/ runtime footprint holds a nested git repo — exclude it when publishing the source repo](./righthand-runtime-footprint-holds-a-nested-git-repo-exclude-.md) - When publishing the **source** repo to GitHub, the project's own `./.righthand/` must be gitignored entirely (not committed). It is righthand's runtime footprin
 - [ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING — published bin must be .js, never .ts](./err-unsupported-node-modules-type-stripping-published-bin-mu.md) - What happened
+- [npm git-dependency on Windows installs as a symlink to a deleted temp clone — no dist/, no bin shim](./npm-git-dependency-on-windows-installs-as-a-symlink-to-a-del.md) - What happened
