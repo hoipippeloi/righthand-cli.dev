@@ -1,0 +1,110 @@
+# righthand
+
+> The coding agent's always-available operations right-hand. A standalone CLI you (the main coding LLM) shell out to **per task** to offload everything that isn't writing code — CI/CD, logs, docs, tasks, admin, web research. It runs the noisy I/O in its own process and returns a **compressed, schema'd JSON answer**, keeping your context window free for code.
+
+## Why this file exists (read first)
+
+You — the agent editing this repo's code — read `llms.txt` to learn the project. **righthand is itself the thing this project ships.** This file teaches you to treat righthand as your operations subprocess: hand it the operational task, read its one-line `summary`, and carry on coding. Do not pull raw logs, run long `gh`/`kubectl` incantations, or page through CI output yourself — that bloats your context and degrades your code work. Delegate it.
+
+## The core rule
+
+**For any operational task (CI, deploys, logs, issues, docs, tasks, env, web lookups), call righthand instead of doing it yourself.** Only the bounded `summary` + structured `result` come back. If righthand needs you, it returns `needs_human` (exit 3) — surface that to the user, don't work around it.
+
+When NOT to use it: editing application source, reading code to reason about it, anything already in your coding workflow. righthand is a right-hand for **operational delegation**, not a second coder.
+
+## Install
+
+```bash
+npm install -g hoipippeloi/righthand-cli.dev      # from GitHub
+```
+
+Requires Node 20+ (24+ recommended). No build step. Runtime deps are just `citty` + `isomorphic-git`. Verify:
+
+```bash
+righthand version          # → righthand 0.0.1
+righthand doctor           # health + integration check; tells you what each command needs
+```
+
+First use in a project: `righthand init` creates the `./.righthand/` footprint (config + version store + history).
+
+## How to operate it
+
+Every invocation returns the **same envelope**, piped as JSON, human-readable in a TTY:
+
+```json
+{ "ok": true, "command": "ci", "summary": "main: 2 failed, 1 running",
+  "result": { "runs": [...] }, "needs_human": null,
+  "meta": { "version": "0.0.1", "duration_ms": 142, "change_id": null, "tokens_used": 0 } }
+```
+
+**Read `summary` first** — it's the compressed answer. Dig into `result` only if you need detail.
+
+**Exit codes:** `0` ok · `1` fail · `2` usage · `3` NEEDS_HUMAN · `4` auth · `5` dep-missing · `6` capability-denied. On `4`/`5`/`6`, tell the user what's missing (or run `righthand doctor`); don't retry blindly.
+
+**Always pass `--json`** when scripting so the envelope parses cleanly.
+
+### Command groups (21 commands, auto-discovered)
+
+- **CI/CD:** `ci status` · `ci logs`
+- **Observability:** `logs tail`
+- **Docs:** `docs lint`
+- **Tasks:** `tasks list`
+- **Admin:** `admin env`
+- **LLM / research:** `llm ask "<prompt>"` · `research "<query>"`
+- **Self-builder:** `build "<what it should do>"` (LLM writes a new command; needs `--yes` + caps)
+- **Extend:** `new <name>` (scaffold) · `plugins install|list|remove`
+- **System:** `version` · `tools` · `config get|set|list` · `history` · `init` · `changes` · `rollback` · `reset` · `doctor` · `web`
+
+## How to couple tightly with a coding LLM (you)
+
+The goal: righthand behaves like a persistent capability of yours, always one shell call away, without occupying your context. Three patterns make this tight:
+
+1. **Enumerate once, then dispatch.** righthand's descriptors are MCP-shaped. Discover them up front, then call by name:
+   ```bash
+   righthand tools --json        # → { tools: [ { name, description, inputSchema, capabilities, … } ] }
+   righthand ci status --json    # bounded JSON summary back
+   ```
+   If you speak MCP, you can call righthand without being taught anything else.
+
+2. **Lean on the summary, drop the rest.** Trust `summary` for the decision and discard the raw `result` once you've acted on it — that's the whole point vs. dragging a log dump into context.
+
+3. **Grow the surface on demand.** If a task recurs and righthand lacks a command for it, don't re-spell the manual steps each time — have it build one:
+   ```bash
+   righthand build "a command that <X>" --yes   # generate → smoke-test → install → immediately runnable
+   ```
+   New commands are **journaled and rollback-able** (`righthand rollback`), so self-extension is safe.
+
+### Capabilities & credentials (so delegation stays safe)
+
+righthand is **deny-by-default**. Capability-gated commands (`ci`, `llm`, `build`, `research`, …) need grants in **project config** `./.righthand/config.json`:
+
+```jsonc
+{
+  "providers": {
+    "default": { "type": "openai-compatible", "baseURL": "env:CHAT_BASE_URL",
+                 "apiKey": "env:DEEPSEEK_API_KEY", "model": "env:CHAT_MODEL" }
+  },
+  "permissions": { "allow": ["net:llm", "fs:write"], "deny": [] },
+  "defaults": { "provider": "default" }
+}
+```
+
+- **Capabilities** (`exec:` · `net:` · `fs:` · `llm:`, with `*` wildcards) gate every run; exit `6` = denied.
+- **Credentials** use `env:`/`keychain:` indirection — never plaintext on disk or in output. A project-root `.env` is auto-loaded.
+- Run `righthand doctor` any time a command is denied to see exactly what it needs.
+
+## Quick reference
+
+```bash
+righthand                        # list commands
+righthand tools --json           # MCP-shaped discovery for agents
+righthand init                   # create ./.righthand footprint
+righthand doctor                 # health + what each command needs
+righthand ci status --json       # delegate a CI check → read summary
+righthand rollback --yes         # undo the last journaled change
+righthand web                    # visual runner (browser) → http://127.0.0.1:8787
+```
+
+## Status / limits (v1 baseline)
+
+`keychain:` resolves to null (use `env:`); subprocess isolation for untrusted plugins is capability+permission enforcement only (not OS isolation); `--deep` research runs the shallow pipeline today. Full PRD: `.prds/righthand-cli/prd.md`.
