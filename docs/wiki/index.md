@@ -7,7 +7,7 @@ okf_version: "0.1"
 <!-- wiki-nav:start -->
 ## Navigation map
 
-Auto-generated detailed index of every docs/wiki/ concept — the map the LLM uses to locate information. 53 concept(s). Regenerated on init and on wiki_mark_synced. Generated 2026-07-24T13:05:17.988Z.
+Auto-generated detailed index of every docs/wiki/ concept — the map the LLM uses to locate information. 66 concept(s). Regenerated on init and on wiki_mark_synced. Generated 2026-07-24T17:22:01.874Z.
 
 Each entry: `concept-id` (pass to wiki_get) — title — description.
 
@@ -22,18 +22,22 @@ Each entry: `concept-id` (pass to wiki_get) — title — description.
 
 ### Pages
 
+- `pages/artifacts/readme-html-interactive-readme` — README.html interactive README — A self-contained, interactive HTML README at the repo root — the rich, visual companion to the shorthand `README.md`. Built with the `html-docs` skill (feature-
 - `pages/artifacts/righthand-cli-prd` — righthand CLI PRD — The initiative-level Product Requirements Document for [[righthand-cli]] — the why, scope, and 10 high-level capabilities, written so a spec-writer can expand e
 - `pages/artifacts/righthand-prd` — righthand PRD — The authoritative product-definition document for the righthand initiative, produced via the `new-prd-interview` skill.
 - `pages/artifacts/righthand-problem-research-report` — Righthand problem research report — A web-research report (with citations) produced during the Phase-1 PRD brainstorm to ground the righthand problem statement in real evidence rather than assumpt
+- `pages/artifacts/setup-md-llm-onboarding-runbook` — SETUP.md LLM onboarding runbook — `SETUP.md` (repo root) is an executable onboarding runbook written **for an LLM agent to follow** — the counterpart to the shorthand `README.md` and the interac
 - `pages/concepts/command-authoring-and-scaffolding` — Command authoring and scaffolding — What is it?
 - `pages/concepts/command-output-envelope-and-exit-codes` — Command output envelope and exit codes — What is it?
 - `pages/concepts/factory-reset-capability-c-reset` — Factory reset capability (C-RESET) — What is it?
 - `pages/concepts/ops-domain-commands-c8` — Ops domain commands (C8) — What is it?
+- `pages/concepts/self-extending-safe-undo-loop` — Self-extending safe-undo loop — What is it?
 - `pages/entities/doctor-command` — doctor command — **`righthand doctor`** is the read-only health & integration diagnostics command (capability [[c10-diagnostics]] / `decisions/diagnostics-command-righthand-doct
 - `pages/entities/llm-command` — llm command — **`righthand llm`** is the user-facing command that wraps [[llm-provider-integration]]'s `complete()`. It is the thinnest possible surface over the LLM: send a 
 - `pages/entities/llm-provider-integration` — LLM provider integration — **LLM provider integration** (`src/llm.ts`) is the single load-bearing module every reasoning capability builds on. It exposes one entry point — `complete()` —
 - `pages/entities/plugins-command` — plugins command — What it is
 - `pages/entities/righthand-cli` — righthand cli — **righthand cli** is the product this repository builds: an always-available CLI that a **main / coding LLM** can hand tasks off to. The coding agent focuses on
+- `pages/entities/web-command` — web command — **`righthand web`** is the command that launches the visual command-runner webapp. It is a long-running **foreground** command: it starts a stdlib HTTP server, 
 - `pages/TEMPLATES` — Page Templates — Reference templates for Concept, Entity, and Artifact pages. Follow these when using wiki_note_page.
 
 ### Decisions
@@ -64,23 +68,32 @@ Each entry: `concept-id` (pass to wiki_get) — title — description.
 - `decisions/stateless-subprocess-invocation` — Subprocess-per-task invocation: righthand is stateless, not a daemon — Context
 - `decisions/technical-approach-proposed-architecture` — Technical approach — proposed architecture — Context
 - `decisions/web-research-search-as-a-capability-d6` — Web research / search as a capability (D6) — Context
+- `decisions/web-ui-reuses-in-process-dispatch-not-subprocess-spawning` — Web UI reuses in-process dispatch (not subprocess spawning) — Context
 
 ### Rules
 
 - `rules/compress-don-t-relay` — Compress, don't relay — Guideline
 - `rules/credential-values-use-env-keychain-indirection-never-plainte` — Credential values use env:/keychain: indirection — never plaintext on disk or in output — Guideline
+- `rules/foundation-first-fan-out-leaf-parallel-build` — Foundation-first, fan-out-leaf parallel build — Guideline
+- `rules/structured-command-errors-propagate-don-t-catch-all-and-wrap` — Structured command errors propagate — don't catch-all and wrap as needs_human — Guideline
 
 ### Learnings
 
 - `learnings/bun-compile-binaries-are-58-109mb-crust-js-is-alpha-stage` — Bun --compile binaries are 58–109MB; crust.js is alpha-stage — Two non-obvious facts surfaced while evaluating the CLI framework (see
 - `learnings/cold-start-177ms-after-discovery-isomorphic-git-kept-off-the` — Cold-start ~177ms after discovery; isomorphic-git kept off the cold path — After wiring auto-discovery (9 core command files, each importing its deps), `righthand tools` subprocess cold-start rose from the **94 ms** baseline (3 command
+- `learnings/config-set-must-json-coerce-arrays-objects-the-layered-merge` — config set must JSON-coerce arrays/objects — the layered merge silently drops wrong-typed values — What happened
 - `learnings/expensive-commands-can-t-show-then-confirm-via-dispatch-the-` — expensive commands can't show-then-confirm via dispatch — the approval gate preempts run() — When a command sets `costTier: "expensive"` (or `destructive: true`), the dispatch-level approval gate in `src/runtime.ts` / `src/capabilities.ts#requiresApprov
+- `learnings/inline-mermaid-svgs-fail-silently-on-import-var-color-mix-re` — Inline mermaid SVGs fail silently on @import, var(), color-mix() — resolve to explicit hex before embedding — When embedding a mermaid-rendered SVG **inline** in an HTML doc (e.g. `README.html` built via the `html-docs` skill + `pretty-mermaid`), the raw SVG is not drop
 - `learnings/net-llm-capability-gate-llm-commands-are-denied-before-run-u` — net:llm capability gate: llm commands are denied before run() unless allowed — The `llm` command (and any future `righthand` command) declares `capabilities: ["net:llm"]` in its descriptor. Dispatch (`src/runtime.ts`) runs `checkCapabiliti
 - `learnings/node-strip-only-typescript-rejects-parameter-properties-enum` — Node strip-only TypeScript rejects parameter properties, enums, and namespaces — When running `.ts` files directly on **Node 22+/24** (native type-stripping) — and on **Bun**, which behaves the same way — only *type-only* syntax is stripped.
 - `learnings/node-test-rejects-top-level-await-anywhere-in-the-import-gra` — node --test rejects top-level await anywhere in the import graph — `node --test` fails an entire test file with "Detected unsettled top-level await" if **any** module in the file's import graph uses top-level `await` — even a d
 - `learnings/operational-task-failure-modes-of-coding-agents` — Operational-task failure modes of coding agents — Research (web-research skill, three parallel subagents, cited) into why coding agents — Claude Code, Codex, Cursor, Aider, etc. — degrade the moment an *operati
 - `learnings/ops-commands-declaring-capabilities-are-capability-gated-bef` — Ops commands declaring capabilities are capability-gated before they run — tests must grant caps — When implementing the C8 ops command groups (`ci`, `logs`, `docs`, `tasks`, `admin`), each command declares `capabilities` (e.g. `["exec:gh","net:api.github.com
+- `learnings/parallel-agents-against-one-repo-report-unreliable-test-coun` — Parallel agents against one repo report unreliable test counts — When multiple worker agents run in parallel **against the same repo working
 - `learnings/resolveactivescope-falls-back-to-user-until-a-project-footpr` — resolveActiveScope falls back to "user" until a project footprint exists — `resolveActiveScope()` in `src/footprint.ts` returns **"project"** only when `./.righthand/` (or `.git/`) exists in the project root; otherwise it returns **"us
+- `learnings/righthand-auto-loads-env-env-indirection-covers-all-provider` — righthand auto-loads .env; env: indirection covers all provider fields — What changed
+- `learnings/righthand-runtime-footprint-holds-a-nested-git-repo-exclude-` — .righthand/ runtime footprint holds a nested git repo — exclude it when publishing the source repo — When publishing the **source** repo to GitHub, the project's own `./.righthand/` must be gitignored entirely (not committed). It is righthand's runtime footprin
+- `learnings/wrapped-cli-ops-commands-must-surface-non-zero-exits-ci-had-` — Wrapped-CLI ops commands must surface non-zero exits — ci had the bug, logs/tasks/docs likely do too — The gotcha
 <!-- wiki-nav:end -->
 
 An [OKF](https://github.com/earendil-works/okf) bundle documenting this project.

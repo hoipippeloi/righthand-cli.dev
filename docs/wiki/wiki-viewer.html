@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>righthand.cli Wiki Viewer</title>
+  <title>righthand-cli.dev Wiki Viewer</title>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github.min.css" media="all" id="hljs-light" disabled />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github-dark.min.css" media="all" id="hljs-dark" disabled />
@@ -164,7 +164,7 @@
     <button class="nav-btn" id="fwdBtn" title="Forward" disabled>
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8L22 12L18 16"/><path d="M2 12H22"/></svg>
     </button>
-    <span class="file-name" id="fileName">righthand.cli Wiki</span>
+    <span class="file-name" id="fileName">righthand-cli.dev Wiki</span>
     <button id="sidebarToggle" title="Toggle sidebar">&#9776;</button>
     <button id="homeBtn">Home</button>
     <button class="theme-toggle" id="themeToggle" title="Toggle theme">
@@ -689,6 +689,7 @@ Accepted — locked during the PRD interview (Q5). Pro-dev-with-ops is the desig
 - [No build step — run TypeScript source directly](./no-build-step-run-typescript-source-directly.md) - Context
 - [Command auto-discovery: one file per command, plugin handlers stay lazy](./command-auto-discovery-one-file-per-command-plugin-handlers-.md) - Context
 - [Mutating commands own their journaling (not a dispatch auto-wrap)](./mutating-commands-own-their-journaling-not-a-dispatch-auto-w.md) - Context
+- [Web UI reuses in-process dispatch (not subprocess spawning)](./web-ui-reuses-in-process-dispatch-not-subprocess-spawning.md) - Context
 `,
   "decisions/llm-augmented-commands-as-a-first-class-pillar.md": `---
 type: Decision
@@ -1487,6 +1488,47 @@ This slots into the scope picture as a **Phase 2** capability: it **depends on P
 
 Accepted as a scope capability (stated requirement). Phasing (Phase 2, behind P4) and search-backend selection remain open. Shapes the command surface and config (LLM provider + search provider) until superseded.
 `,
+  "decisions/web-ui-reuses-in-process-dispatch-not-subprocess-spawning.md": `---
+type: Decision
+title: Web UI reuses in-process dispatch (not subprocess spawning)
+description: Context
+tags: [architecture, web-ui, dispatch, c-web, righthand]
+status: accepted
+timestamp: "2026-07-24T14:20:18.120Z"
+---
+
+# Web UI reuses in-process dispatch (not subprocess spawning)
+
+## Context
+
+\`righthand web\` (C-web) introduces an alternate command surface: a self-contained SPA served by a stdlib \`node:http\` server, backed by two endpoints (\`GET /api/tools\`, \`POST /api/run\`). The question was how \`/api/run\` actually executes a command.
+
+## The choice
+
+The web server imports \`dispatch\` from \`src/runtime.ts\` and calls it **in-process** — the exact same code path the CLI uses. \`POST /api/run\` builds a \`CommandContext\` (\`loadConfig()\` + request args/flags, \`isTTY:false\`, \`recordHistory:true\`) and calls \`dispatch(command, ctx)\`, returning \`{ envelope, exitCode }\`.
+
+## Alternatives considered
+
+- **Spawn a \`righthand\` subprocess per request** (the agent-facing model). Rejected: every request re-parses layered config, re-discovers the manifest, and adds process-spawn latency. Worse, it would re-implement arg/flag plumbing outside the shared contract.
+- **Reimplement dispatch inside the web layer** (parse args, run handlers directly). Rejected: guaranteed drift between CLI and web behavior, and doubles the surface for capability/rollback bugs.
+
+## Rationale
+
+By sharing one \`dispatch()\`:
+- **Config layering** (\`project > user > env\`) is identical — the web UI sees the same providers/permissions as the CLI.
+- **Capability gates** (deny-by-default, exit 6) apply identically; the UI can't bypass \`net:llm\` / \`exec:*\` grants.
+- **Rollback/journaling** works through the web layer unchanged — verified E2E (\`new\` → \`rollback\` cycle driven entirely via \`/api/run\`).
+- **Approval gate** still holds: the human clicking *Run* is the consent path, but genuinely destructive/expensive ops still escalate to \`needs_human\` unless the UI sends \`--yes\`. The click is consent; the gate is not removed.
+
+It also preserves the **stateless-per-invocation model**: \`righthand web\` is a foreground one-shot server (Ctrl+C stops it), not a daemon — consistent with [[stateless-subprocess-invocation]].
+
+## Consequences
+
+- One bug-fix or behavior change in \`src/runtime.ts\` / \`src/discover.ts\` / \`src/config.ts\` / \`src/capabilities.ts\` flows to both surfaces for free.
+- The server **refuses to run \`web\` inside itself** (\`POST /api/run {command:"web"}\` → 400) to prevent recursive server spawning; the SPA hides \`web\` from the command list.
+- \`src/web/server.ts\` carries no framework and no build step (vanilla SPA in \`app.html\`) — matches [[no-build-step-run-typescript-source-directly]] and [[bun-support-is-a-hard-constraint-npm-only-distribution]].
+- No new runtime dependency added; the web layer is pure stdlib.
+`,
   "glossary.md": `---
 type: Glossary
 title: Glossary
@@ -1509,14 +1551,14 @@ okf_version: "0.1"
 <!-- wiki-nav:start -->
 ## Navigation map
 
-Auto-generated detailed index of every docs/wiki/ concept — the map the LLM uses to locate information. 53 concept(s). Regenerated on init and on wiki_mark_synced. Generated 2026-07-24T13:01:37.312Z.
+Auto-generated detailed index of every docs/wiki/ concept — the map the LLM uses to locate information. 53 concept(s). Regenerated on init and on wiki_mark_synced. Generated 2026-07-24T13:05:17.988Z.
 
 Each entry: \`concept-id\` (pass to wiki_get) — title — description.
 
 ### Core concepts
 
 - \`glossary\` — Glossary — Key terms for this project.
-- \`overview\` — Overview — What this project contains and its structure.
+- \`overview\` — Overview — What righthand is, its structure, and how it's built.
 
 ### Architecture
 
@@ -1652,6 +1694,37 @@ After wiring auto-discovery (9 core command files, each importing its deps), \`r
 
 Data point collected 2026-07-24, Node 24.15.0, Windows.
 `,
+  "learnings/config-set-must-json-coerce-arrays-objects-the-layered-merge.md": `---
+type: Learning
+title: config set must JSON-coerce arrays/objects — the layered merge silently drops wrong-typed values
+description: What happened
+tags: [config, capabilities, bug, gotcha]
+timestamp: "2026-07-24T16:49:08.432Z"
+---
+
+# config set must JSON-coerce arrays/objects — the layered merge silently drops wrong-typed values
+
+## What happened
+While validating [[setup-md-llm-onboarding-runbook]] Step 5, \`righthand config set permissions.allow '["net:llm"]'\` was stored as the **string** \`["net:llm"]\`. The layered config merge only accepts \`permissions.allow\` as an **array**, so the string value was **silently dropped** — the capability grant vanished and \`llm ask\` exited \`6\` (capability-denied) even though the user thought they'd granted it. \`config set\` returned exit 0 with no warning.
+
+## Root cause
+\`coerceValue()\` in \`src/config.ts\` only handled \`true\`/\`false\`/integers/else-string; JSON-looking strings were never parsed, so \`[...]\`/\`{...}\` landed as strings. The merge step (\`mergeConfig\`/layering) is **type-strict** — it discards a value whose shape doesn't match the schema, with no error and no log line.
+
+## Fix
+\`coerceValue\` now best-effort JSON-parses any value that starts with \`[\`/\`{\` and ends with \`]\`/\`}\` (falls through to string on parse failure). +1 regression test (\`config set\` array round-trip). Re-verified the SETUP flow end-to-end: the grant persists and \`llm ask\` proceeds past the capability gate (exit 4, not 6). 174/174 tests pass.
+
+## Durable gotcha (still true)
+The **layered config merge silently drops type-mismatched values**. The coercion fix means \`config set\` now produces the right type for literals, but code that writes config directly (or a future regression) can still hit this. When a \`config set\` "succeeds" but a grant/flag has no effect:
+- array keys (\`permissions.allow\`, etc.) must land as a real JSON array,
+- object keys as a JSON object literal,
+- always \`config get <key>\` after \`set\` to confirm the **stored type** (not just presence).
+
+This also matters because capabilities are deny-by-default ([[plugin-sandbox-capability-declaration-permission-flags-subpr]]) — a dropped \`permissions.allow\` entry looks exactly like a denied command, masking the real cause.
+
+## Source
+- \`src/config.ts\` — \`coerceValue()\` (~line 162) and \`setPath()\` (~line 157)
+- \`SETUP.md\` Step 5 — the capability-grant flow that surfaced the bug
+`,
   "learnings/expensive-commands-can-t-show-then-confirm-via-dispatch-the-.md": `---
 type: Learning
 title: expensive commands can't show-then-confirm via dispatch — the approval gate preempts run()
@@ -1685,6 +1758,44 @@ _Captured learnings will be listed here._
 - [Ops commands declaring capabilities are capability-gated before they run — tests must grant caps](./ops-commands-declaring-capabilities-are-capability-gated-bef.md) - When implementing the C8 ops command groups (\`ci\`, \`logs\`, \`docs\`, \`tasks\`, \`admin\`), each command declares \`capabilities\` (e.g. \`["exec:gh","net:api.github.com
 - [resolveActiveScope falls back to "user" until a project footprint exists](./resolveactivescope-falls-back-to-user-until-a-project-footpr.md) - \`resolveActiveScope()\` in \`src/footprint.ts\` returns **"project"** only when \`./.righthand/\` (or \`.git/\`) exists in the project root; otherwise it returns **"us
 - [expensive commands can't show-then-confirm via dispatch — the approval gate preempts run()](./expensive-commands-can-t-show-then-confirm-via-dispatch-the-.md) - When a command sets \`costTier: "expensive"\` (or \`destructive: true\`), the dispatch-level approval gate in \`src/runtime.ts\` / \`src/capabilities.ts#requiresApprov
+- [Parallel agents against one repo report unreliable test counts](./parallel-agents-against-one-repo-report-unreliable-test-coun.md) - When multiple worker agents run in parallel **against the same repo working
+- [Wrapped-CLI ops commands must surface non-zero exits — ci had the bug, logs/tasks/docs likely do too](./wrapped-cli-ops-commands-must-surface-non-zero-exits-ci-had-.md) - The gotcha
+- [righthand auto-loads .env; env: indirection covers all provider fields](./righthand-auto-loads-env-env-indirection-covers-all-provider.md) - What changed
+- [Inline mermaid SVGs fail silently on @import, var(), color-mix() — resolve to explicit hex before embedding](./inline-mermaid-svgs-fail-silently-on-import-var-color-mix-re.md) - When embedding a mermaid-rendered SVG **inline** in an HTML doc (e.g. \`README.html\` built via the \`html-docs\` skill + \`pretty-mermaid\`), the raw SVG is not drop
+- [config set must JSON-coerce arrays/objects — the layered merge silently drops wrong-typed values](./config-set-must-json-coerce-arrays-objects-the-layered-merge.md) - What happened
+- [.righthand/ runtime footprint holds a nested git repo — exclude it when publishing the source repo](./righthand-runtime-footprint-holds-a-nested-git-repo-exclude-.md) - When publishing the **source** repo to GitHub, the project's own \`./.righthand/\` must be gitignored entirely (not committed). It is righthand's runtime footprin
+`,
+  "learnings/inline-mermaid-svgs-fail-silently-on-import-var-color-mix-re.md": `---
+type: Learning
+title: Inline mermaid SVGs fail silently on @import, var(), color-mix() — resolve to explicit hex before embedding
+description: When embedding a mermaid-rendered SVG **inline** in an HTML doc (e.g. \`README.html\` built via the \`html-docs\` skill + \`pretty-mermaid\`), the raw SVG is not drop
+tags: [html-docs, svg, mermaid, gotcha]
+timestamp: "2026-07-24T16:42:25.471Z"
+---
+
+# Inline mermaid SVGs fail silently on @import, var(), color-mix() — resolve to explicit hex before embedding
+
+When embedding a mermaid-rendered SVG **inline** in an HTML doc (e.g. \`README.html\` built via the \`html-docs\` skill + \`pretty-mermaid\`), the raw SVG is not drop-in safe. It contains:
+
+- a **Google Fonts \`@import\`** line,
+- **\`var(--foo)\`** CSS custom-property references (no \`:root\` resolves them inside an inline SVG),
+- **\`color-mix(...)\`** calls.
+
+All three **silently fail** in inline/\`<foreignObject>\` contexts: the font never loads (falls back to default), and \`var()\`/\`color-mix()\` resolve to nothing — so text/strokes render transparent or as a black default. There is no error; the diagram just looks wrong or empty.
+
+## The fix — post-process before embedding
+
+1. Strip the Google Fonts \`@import\` line (system fonts only; the html-docs skill is zero-external-deps by convention).
+2. Replace every \`var(--x)\` and \`color-mix(...)\` with an **explicit hex** lifted from the theme palette.
+3. Fix **double-escaped entities** that the render/escape pipeline can introduce: \`&amp;lt;\` → \`<\`, and surrounding \`&quot;\` → \`"\` in SVG text nodes.
+
+## Where it applies
+
+Any inline-SVG diagram in this repo: \`README.html\`, \`docs/wiki/wiki-viewer.html\`, and future HTML docs. \`.work/righthand-flow.svg\` is the raw render; \`righthand-flow.clean.svg\` is the post-processed version that actually gets embedded.
+
+## Lesson
+
+A mermaid SVG is a *source*, not a finished asset, once it goes inline. Always run the post-processor (strip imports → resolve vars → unescape) before embedding, or the diagram degrades silently.
 `,
   "learnings/net-llm-capability-gate-llm-commands-are-denied-before-run-u.md": `---
 type: Learning
@@ -1802,6 +1913,45 @@ How a command emits exit 5: \`throw new CommandError(EXIT.DEP_MISSING, "gh not f
 
 The \`runCli\` test seam lives in \`src/shell.ts\`: \`runCli(bin, args, { runner })\` where \`runner\` defaults to \`spawnSync\`-wrapping \`defaultRunner\`. There's also a module-level \`setRunnerForTest\`/\`resetRunnerForTest\` so commands that call \`runCli(bin, args)\` with no opts (all of them) can be faked end-to-end through \`dispatch\`. A missing binary is signalled by the runner throwing an error with \`code: "ENOENT"\`; \`runCli\` catches it → \`{ ok:false, code:-1, missing:true }\`.
 `,
+  "learnings/parallel-agents-against-one-repo-report-unreliable-test-coun.md": `---
+type: Learning
+title: Parallel agents against one repo report unreliable test counts
+description: When multiple worker agents run in parallel **against the same repo working
+tags: [testing, parallel-build, gotcha]
+timestamp: "2026-07-24T13:07:25.094Z"
+---
+
+# Parallel agents against one repo report unreliable test counts
+
+When multiple worker agents run in parallel **against the same repo working
+copy** (not separate worktrees/branches), each reports a test count that is a
+**snapshot of its own view at finish time** — not the integrated state. Their
+counts overlap and contradict (e.g. one build round reported 60 / 89 / 109 / 120
+from four workers that all ran the suite).
+
+## Why it happens
+
+Workers share one filesystem. As each finishes, others are still writing. A
+worker's \`npm test\` reflects whatever files existed when *it* ran, which is
+neither its isolated contribution nor the merged whole.
+
+## What to do
+
+- **Never trust parallel-worker test counts as the merged result.** Always run
+  \`npm test\` yourself after the round fully completes to get the true integrated
+  state, then fix any conflicts.
+- For genuinely independent counts, give each worker its own worktree/branch and
+  merge explicitly. The single-repo fan-out trades count reliability for
+  zero-merge simplicity — fine, as long as you re-verify at the end.
+- Pair this with [[foundation-first-fan-out-leaf-parallel-build]]: the foundation
+  round (single owner) has a trustworthy count; only the parallel leaf rounds
+  need the post-round re-verification.
+
+## Evidence
+
+righthand v1 build: Round A's five parallel workers reported 60/89/109/120; the
+true integrated state after the round was 120/120, cold-start 113ms.
+`,
   "learnings/resolveactivescope-falls-back-to-user-until-a-project-footpr.md": `---
 type: Learning
 title: resolveActiveScope falls back to "user" until a project footprint exists
@@ -1821,6 +1971,182 @@ timestamp: "2026-07-24T12:46:44.926Z"
 **Fix in tests:** pass \`scope\` explicitly. e.g. default the test ctx to \`{ scope: "project", ...flags }\` (as \`test/plugins.test.ts\` does). This also makes scope resolution deterministic regardless of footprint state. (Compare \`src/commands/new.ts\`, which hard-codes \`scope = "user" : "project"\` and so never hits this path.)
 
 **Rule of thumb:** mutating-command tests should never rely on \`resolveActiveScope\`'s implicit default — set the scope explicitly.
+`,
+  "learnings/righthand-auto-loads-env-env-indirection-covers-all-provider.md": `---
+type: Learning
+title: "righthand auto-loads .env; env: indirection covers all provider fields"
+description: What changed
+tags: [llm, config, dotenv, credentials, secrets, c4, c9]
+timestamp: "2026-07-24T14:07:21.771Z"
+---
+
+# righthand auto-loads .env; env: indirection covers all provider fields
+
+## What changed
+
+righthand now reads \`.env\` files into \`process.env\` at config time, and the
+\`env:VAR\` indirection (previously \`apiKey\`-only) was generalized to **all three
+provider connection fields** — \`apiKey\`, \`baseURL\`, and \`model\`.
+
+### \`.env\` loading
+
+- \`src/dotenv.ts\` (\`loadDotEnv(file)\`) is wired into \`src/config.ts\` and reads
+  **\`./.env\`** (repo root) then **\`~/.righthand/.env\`** before config resolution.
+- **Real shell env always wins**: dotenv only sets keys that aren't already
+  defined (\`if (process.env[key] === undefined)\`). A var exported in the shell
+  is never overwritten by the file.
+- Supports \`KEY=VALUE\`, \`export KEY=VALUE\`, single/double quotes, \`#\` comments,
+  blank lines. Values are **never logged**.
+- This means secrets no longer need to be exported in the shell — drop a \`.env\`
+  and righthand picks it up.
+
+### Generalized \`env:\` indirection
+
+- \`src/llm.ts\` gained \`resolveEnvRef(value)\`: \`"env:VAR"\` → \`process.env[VAR]\`,
+  plaintext → as-is. \`complete()\` now resolves \`provider.model\` and
+  \`provider.baseURL\` through it (alongside the existing \`resolveApiKey\` for the
+  key).
+- Effect: a provider entry can reference \`env:CHAT_BASE_URL\` /
+  \`env:DEEPSEEK_API_KEY\` / \`env:CHAT_MODEL\`, keeping the **key, endpoint, and
+  model all in \`.env\`** while \`config.json\` holds only \`env:\` references. The
+  footprint's \`config.json\` stays committable/shareable across machines — no
+  machine-local wiring copied to disk.
+
+## How to configure a provider (the working pattern)
+
+\`\`\`bash
+# .env  (gitignored)
+DEEPSEEK_API_KEY="sk-..."
+CHAT_BASE_URL="https://api.deepseek.com/v1"
+CHAT_MODEL="deepseek-chat"
+\`\`\`
+
+\`\`\`jsonc
+// ./.righthand/config.json  (committable — only refs, no values)
+{
+  "providers": { "default": {
+      "type": "openai-compatible",
+      "baseURL": "env:CHAT_BASE_URL",
+      "apiKey":  "env:DEEPSEEK_API_KEY",
+      "model":   "env:CHAT_MODEL"
+  }},
+  "defaults": { "provider": "default" },
+  "permissions": { "allow": ["net:llm", "fs:write"] }
+}
+\`\`\`
+
+## Why this matters / how it extends existing knowledge
+
+This extends [[credential-values-use-env-keychain-indirection-never-plainte]]
+beyond *secrets*: the same indirection now keeps **endpoint + model** out of the
+committable config too, so \`config.json\` is fully machine-agnostic. It is the
+single source of truth for "where do I put my provider wiring?" — answer: \`.env\`,
+referenced via \`env:\`.
+
+## Gotchas
+
+- \`.env\` files are **not** a config layer that overrides \`config.json\` — they
+  populate the environment that \`env:\` refs read from. \`config.json\` structure
+  still wins for non-secret config.
+- \`config list\` already redacts \`env:\` refs (shows \`env:CHAT_BASE_URL\`, not the
+  value); this is unchanged.
+- Verified end-to-end: a real \`righthand llm\` round-trip to DeepSeek returned
+  \`"hello world"\`, 14 tokens, exit 0.
+
+## Source
+
+- \`src/dotenv.ts\` — the loader (\`loadDotEnv\`).
+- \`src/llm.ts#resolveEnvRef\` — generalized indirection; called by \`complete()\`.
+- \`src/config.ts\` — where \`loadDotEnv\` is invoked.
+- \`[[llm-provider-integration]]\` — the entity whose contract gained \`resolveEnvRef\`.
+`,
+  "learnings/righthand-runtime-footprint-holds-a-nested-git-repo-exclude-.md": `---
+type: Learning
+title: .righthand/ runtime footprint holds a nested git repo — exclude it when publishing the source repo
+description: When publishing the **source** repo to GitHub, the project's own \`./.righthand/\` must be gitignored entirely (not committed). It is righthand's runtime footprin
+tags: [distribution, git, publishing, security, footprint]
+timestamp: "2026-07-24T17:13:39.561Z"
+---
+
+# .righthand/ runtime footprint holds a nested git repo — exclude it when publishing the source repo
+
+When publishing the **source** repo to GitHub, the project's own \`./.righthand/\` must be gitignored entirely (not committed). It is righthand's runtime footprint — config, \`history.jsonl\`, and critically a **nested \`.git\`** because every footprint is an isomorphic-git repo ([[rollback-version-store-isomorphic-git-pure-js-over-system-gi]]). Committing it would (a) publish the runtime footprint and (b) embed a nested git repo inside the published tree.
+
+The pre-publish checklist that caught this (turn: pushing to GitHub):
+1. Scan committable files for the \`sk-\` key (or any secret) before \`git add\`.
+2. Confirm \`.env\` is gitignored.
+3. Confirm \`./.righthand/\`, \`./.pi/\`, \`./.work/\` are gitignored.
+4. Re-verify the staged set is clean, then re-run the secret scan against the remote after push.
+
+## The live distribution channel (as of this turn)
+righthand is now actually published to GitHub and installable via the npm **owner/repo** shorthand:
+
+\`\`\`bash
+npm install -g hoipippeloi/righthand-cli.dev     # npm resolves owner/repo → GitHub
+righthand version
+\`\`\`
+
+Two remotes are configured on the source repo:
+- \`origin\` → \`creatuluw/righthand.cli\` (private)
+- \`dev\` → \`hoipippeloi/righthand-cli.dev\` (public — the installable one)
+
+## Two known TODOs surfaced by going public
+- **Author email exposure**: commits are authored as \`creatuluw@gmail.com\` (visible on the public repo). Rewrite author + force-push early if that identity shouldn't be public.
+- **License is \`UNLICENSED\`**: publicly-visible source with no license is legally "all rights reserved." Pick MIT/Apache-2.0 soon.
+
+Relates to [[distribution-npm-based-for-cli-and-plugins-version-pinned-op]] (the strategy this executes).
+`,
+  "learnings/wrapped-cli-ops-commands-must-surface-non-zero-exits-ci-had-.md": `---
+type: Learning
+title: Wrapped-CLI ops commands must surface non-zero exits — ci had the bug, logs/tasks/docs likely do too
+description: The gotcha
+tags: [ops-commands, c8, bug-class, shell, runcli, exit-codes, e2e]
+timestamp: "2026-07-24T13:48:19.072Z"
+---
+
+# Wrapped-CLI ops commands must surface non-zero exits — ci had the bug, logs/tasks/docs likely do too
+
+## The gotcha
+
+Ops commands that wrap an external CLI via \`runCli()\` (\`src/shell.ts\`) get back
+\`{ ok, code, stdout, stderr }\`. A handler that **ignores \`ok\`** and returns a
+benign default (e.g. \`"none"\`) on every path silently turns a *real failure* —
+non-zero exit, not a git repo, not authed, CLI broken — into a **false success**
+(\`ok:true\`, exit 0). That is worse than a raw dump: it is an *invisible* failure.
+
+## Where it bit us
+
+\`src/commands/ci.ts\` — \`ci status\` / \`ci logs\` swallowed \`gh\` failures as
+\`"none"\` / exit 0. Surfaced by the first real end-to-end harness run (41 checks)
+because \`gh\` was installed-but-failing ("not a git repo") and the command
+reported success anyway. Fixed by adding a \`ghFailed()\` envelope (\`ok:false\`,
+last stderr line as \`summary\`) and guarding each \`runCli\` call:
+
+\`\`\`ts
+const res = runCli("gh", args);
+if (!res.ok) return ghFailed("status", res);   // surface, don't swallow
+\`\`\`
+
+## Forward-looking: sweep the other C8 domains
+
+\`logs\`, \`tasks\`, \`docs\`, \`admin\` all wrap the same \`runCli\` and are the prime
+suspects for the same anti-pattern. Sweep them before any ships against a live
+backend. This is exactly the class of defect end-to-end testing catches that
+unit tests miss — unit tests inject a fake runner that always "succeeds", so a
+missing \`!res.ok\` guard never fires.
+
+## Why it matters
+
+Violates [[compress-don-t-relay]] (compression that hides failures is worse than
+relay) and breaks the [[command-output-envelope-and-exit-codes]] contract
+(\`ok:true\` implies success). Also relates to [[self-extending-safe-undo-loop]]'s
+sibling fix for structured-error handling.
+
+## Source
+
+- \`src/commands/ci.ts\` — \`ghFailed()\` + the \`runCli\` guards (the fix).
+- \`src/shell.ts\` — \`runCli()\` return shape.
+- \`.work/e2e.mjs\` — the harness that caught it (one-shot, not committed to \`test/\`).
 `,
   "overview.md": `---
 type: System Overview
@@ -1889,15 +2215,20 @@ implementation specs; \`research_righthand_problem/\` for the evidence base.
   (the core value prop vs raw CLIs).
 - \`src/cli.ts\` — \`citty\` wiring; **auto-builds subcommands** from the discovered
   table (collision-free for parallel development).
+- \`src/web/server.ts\` — **web UI** (\`righthand web\`): stdlib \`node:http\`
+  server serving a self-contained SPA (\`src/web/app.html\`) + \`/api/tools\` and
+  \`/api/run\`, backed by the **same in-process \`dispatch()\`** as the CLI, so
+  config, capabilities, and rollback carry through
+  ([[web-ui-reuses-in-process-dispatch]]).
 
-## Command surface (20 commands, all auto-discovered)
+## Command surface (21 commands, all auto-discovered)
 
 \`version\`, \`tools\`, \`config\` (get/set/list), \`history\`, \`init\`, \`changes\`,
 \`rollback\`, \`reset\`, \`new\` (C3 scaffolder), \`plugins\` (install/list/remove),
 \`llm ask\`, \`build\` (C5 self-builder), \`research\` (C6), \`doctor\` (C10), and the
-ops domains: \`ci\`, \`logs\`, \`docs\`, \`tasks\`, \`admin\` (C8), plus \`hello\` (demo).
+ops domains: \`ci\`, \`logs\`, \`docs\`, \`tasks\`, \`admin\` (C8), plus \`hello\` (demo) and \`web\` (visual command runner).
 
-## Capabilities map (all 10 built, 166 tests)
+## Capabilities map (all 10 built, 173 tests)
 
 C1 Core Runtime · C2 Plugin System · C3 Authoring/Scaffolder · C4 LLM Providers ·
 C5 Self-Builder · C6 Research · C7 Rollback/Reset · C8 Ops Domains · C9
@@ -1914,6 +2245,8 @@ node bin/righthand.ts new mycmd       # scaffold a command (auto-discovered)
 node bin/righthand.ts build "..."     # LLM writes a new command (needs --yes + caps)
 node bin/righthand.ts doctor          # health/config diagnostics
 node bin/righthand.ts rollback --yes  # undo the last change
+node bin/righthand.ts web            # visual command-runner webapp (opens browser)
+righthand <command>                  # once \`npm link\`-ed, runs globally from anywhere
 \`\`\`
 
 Capability-gated commands (\`ci\`, \`llm\`, \`build\`, \`research\`, …) are
@@ -1934,6 +2267,40 @@ _Documents, diagrams, and deliverables will be listed here._
 - [Righthand problem research report](./righthand-problem-research-report.md) - A web-research report (with citations) produced during the Phase-1 PRD brainstorm to ground the righthand problem statement in real evidence rather than assumpt
 - [righthand CLI PRD](./righthand-cli-prd.md) - The initiative-level Product Requirements Document for [[righthand-cli]] — the why, scope, and 10 high-level capabilities, written so a spec-writer can expand e
 - [righthand PRD](./righthand-prd.md) - The authoritative product-definition document for the righthand initiative, produced via the \`new-prd-interview\` skill.
+- [README.html interactive README](./readme-html-interactive-readme.md) - A self-contained, interactive HTML README at the repo root — the rich, visual companion to the shorthand \`README.md\`. Built with the \`html-docs\` skill (feature-
+- [SETUP.md LLM onboarding runbook](./setup-md-llm-onboarding-runbook.md) - \`SETUP.md\` (repo root) is an executable onboarding runbook written **for an LLM agent to follow** — the counterpart to the shorthand \`README.md\` and the interac
+`,
+  "pages/artifacts/readme-html-interactive-readme.md": `---
+type: Artifact
+title: README.html interactive README
+description: A self-contained, interactive HTML README at the repo root — the rich, visual companion to the shorthand \`README.md\`. Built with the \`html-docs\` skill (feature-
+tags: [readme, html-docs, artifact]
+timestamp: "2026-07-24T16:42:25.472Z"
+---
+
+# README.html interactive README
+
+A self-contained, interactive HTML README at the repo root — the rich, visual companion to the shorthand \`README.md\`. Built with the \`html-docs\` skill (feature-explainer template), with a mermaid dispatch-flow diagram as its centerpiece.
+
+## What it documents
+
+- [righthand-cli](./righthand-cli.md) — what righthand is and why it exists (TL;DR + stat pills)
+- The **dispatch flow** — manifest lookup → capability check → approval gate → run handler → history (rendered as an interactive SVG; drag-pan, wheel-zoom, reset, fullscreen)
+- The full 21-command surface (table) — see \`righthand tools\`
+- Configuration: layered \`config.json\` + \`.env\`, deny-by-default capability model ([plugin-sandbox-capability-declaration-permission-flags-subpr](./plugin-sandbox-capability-declaration-permission-flags-subpr.md))
+- Enhance pathways: drop-a-file auto-discovery, \`new\` scaffolder, \`build\` self-builder, plugins
+
+## Details
+
+- **Location**: \`README.html\` (repo root); coexists with \`README.md\`.
+- **Format**: single self-contained \`.html\`, zero external deps, system fonts, semantic HTML, \`prefers-color-scheme\` dark mode, \`@media print\` button, responsive (nav collapses on mobile).
+- **Diagram source**: \`.work/righthand-flow.mmd\` → raw \`.work/righthand-flow.svg\` → post-processed \`.work/righthand-flow.clean.svg\` (embedded inline). See [inline-mermaid-svgs-fail-silently-on-import-var-color-mix](./inline-mermaid-svgs-fail-silently-on-import-var-color-mix.md) for why post-processing is required.
+- **Built with**: \`E:\\skills.te9.dev\\html-docs\\SKILL.md\` (feature-explainer template #14) + \`pretty-mermaid\` renderer.
+
+## Source
+
+- \`README.html\` — the artifact itself
+- \`.work/righthand-flow.mmd\` — mermaid source for the dispatch-flow diagram
 `,
   "pages/artifacts/righthand-cli-prd.md": `---
 type: Artifact
@@ -2020,6 +2387,34 @@ A web-research report (with citations) produced during the Phase-1 PRD brainstor
   - \`research_plan.md\` — the plan and sub-questions
   - \`findings_1_failure_modes.md\`, \`findings_2_landscape.md\`, \`findings_3_plugin_models.md\` — raw cited findings from three parallel research subagents.
 - **Generated by**: the \`web-research\` skill — three parallel research subagents fanned out, then synthesized.
+`,
+  "pages/artifacts/setup-md-llm-onboarding-runbook.md": `---
+type: Artifact
+title: SETUP.md LLM onboarding runbook
+description: \`SETUP.md\` (repo root) is an executable onboarding runbook written **for an LLM agent to follow** — the counterpart to the shorthand \`README.md\` and the interac
+tags: [setup, onboarding, docs, artifact]
+timestamp: "2026-07-24T16:49:08.432Z"
+---
+
+# SETUP.md LLM onboarding runbook
+
+\`SETUP.md\` (repo root) is an executable onboarding runbook written **for an LLM agent to follow** — the counterpart to the shorthand \`README.md\` and the interactive [readme-html-interactive-readme](./readme-html-interactive-readme.md). It turns "add righthand to this project" into a deterministic, verify-gated sequence an agent can run without human hand-holding.
+
+## What it documents
+- [righthand-cli](./righthand-cli.md) — what's being onboarded (a subprocess ops CLI a coding agent hands non-coding work to)
+- The **onboarding flow**: detect env → install → \`righthand init\` footprint → gitignore machine-local bits → (optional) wire an LLM provider → grant capabilities → verify → tell the project's agent righthand exists
+- Capability model — deny-by-default, granted via \`permissions.allow\` ([plugin-sandbox-capability-declaration-permission-flags-subpr](./plugin-sandbox-capability-declaration-permission-flags-subpr.md))
+- Credential indirection — \`env:\` refs into \`.env\`, never plaintext ([credential-values-use-env-keychain-indirection-never-plainte](./credential-values-use-env-keychain-indirection-never-plainte.md))
+- An exit-code troubleshooting table (2 usage / 3 NEEDS_HUMAN / 4 auth / 5 dep-missing / 6 capability-denied) plus rollback/removal
+
+## Details
+- **Location**: \`SETUP.md\` (repo root); coexists with \`README.md\` + \`README.html\`.
+- **Format**: plain Markdown; each step has exact commands, a **Verify** gate, and an **On failure** note — designed so an agent never skips ahead on a failed check.
+- **Audience**: an LLM agent run from the target project's root; human-readable too.
+- **Surfaced a bug**: Step 5's documented \`config set permissions.allow '[...]'\` failed until \`coerceValue\` parsed JSON arrays — see [config-set-must-json-coerce-arrays-objects-the-layered-merge-silently](./config-set-must-json-coerce-arrays-objects-the-layered-merge.md).
+
+## Source
+- \`SETUP.md\` — the artifact itself
 `,
   "pages/concepts/command-authoring-and-scaffolding.md": `---
 type: Concept
@@ -2166,6 +2561,7 @@ _Abstract ideas and definitions will be listed here._
 - [Factory reset capability (C-RESET)](./factory-reset-capability-c-reset.md) - What is it?
 - [Command output envelope and exit codes](./command-output-envelope-and-exit-codes.md) - What is it?
 - [Ops domain commands (C8)](./ops-domain-commands-c8.md) - What is it?
+- [Self-extending safe-undo loop](./self-extending-safe-undo-loop.md) - What is it?
 `,
   "pages/concepts/ops-domain-commands-c8.md": `---
 type: Concept
@@ -2211,6 +2607,78 @@ This is righthand's end-user value: "compress, don't relay." Every group returns
 - \`src/shell.ts\` — shared \`runCli\` subprocess helper + test seam + \`hasBinary\` presence check.
 - \`src/commands/{ci,logs,docs,tasks,admin}.ts\` — the five groups.
 - \`test/shell.test.ts\`, \`test/ops.test.ts\` — coverage with injected fake runners (no real \`gh\`/\`kubectl\` needed).
+`,
+  "pages/concepts/self-extending-safe-undo-loop.md": `---
+type: Concept
+title: Self-extending safe-undo loop
+description: What is it?
+tags: [signature-story, self-builder, rollback, auto-discovery, core-loop]
+timestamp: "2026-07-24T13:07:25.094Z"
+---
+
+# Self-extending safe-undo loop
+
+## What is it?
+
+righthand's **signature story**: the end-to-end loop where a user (or the agent
+driving righthand) adds a new command, it is immediately usable, and it can be
+removed again with zero residue — \`new\` (or \`build\`) → auto-discovered → run →
+journaled → \`rollback\` → gone from \`tools\`. It is the product's central proof:
+**self-extend, then safely undo.**
+
+## Why does it matter?
+
+This loop is the whole point of righthand as a self-recursive self-builder. It
+shows that the three pillars compose into one coherent experience:
+
+- **Self-extension** — righthand writes/scaffolds new commands into its own
+  surface (C3 authoring + C5 self-builder) and they run without any wiring step.
+- **Safety** — every mutation is journaled and versioned in an \`isomorphic-git\`
+  store (C7), so any addition can be reverted.
+- **Transparency** — \`tools --json\` reflects the live, auto-discovered surface,
+  so an MCP-aware agent always sees the truth, including that a removed command
+  is really gone.
+
+Without all three, the story breaks: extension without discovery means the new
+command doesn't run; discovery without journaling means an addition can't be
+undone.
+
+## Key rules / properties
+
+- Adding a command = drop a file (scaffolded by \`new\`, or generated by \`build\`).
+  There is **no shared-file edit** and **no registration step** — auto-discovery
+  picks it up next run (see
+  [command-auto-discovery-one-file-per-command-plugin-handlers-](./command-auto-discovery-one-file-per-command-plugin-handlers.md)).
+- Every command mutation is journaled with a \`change_id\` before it is visible;
+  \`changes\` lists them, \`rollback --yes\` reverts the latest (see
+  [mutating-commands-own-their-journaling-not-a-dispatch-auto-w](./mutating-commands-own-their-journaling-not-a-dispatch-auto-w.md)).
+- Rollback never touches app code — it only reverts righthand's own footprint
+  (the [factory-reset-capability-c-reset](./factory-reset-capability-c-reset.md) store), so the user's repo stays
+  intact.
+- After rollback, the command disappears from \`tools\` — the loop is provably
+  reversible.
+
+## Relationships
+
+- [command-authoring-and-scaffolding](./command-authoring-and-scaffolding.md) — the \`new\`/\`build\` half (extension).
+- [factory-reset-capability-c-reset](./factory-reset-capability-c-reset.md) — the \`rollback\`/\`reset\`/\`changes\` half (undo).
+- [command-auto-discovery-one-file-per-command-plugin-handlers-](./command-auto-discovery-one-file-per-command-plugin-handlers.md) — what makes
+  extension wiring-free.
+- [mutating-commands-own-their-journaling-not-a-dispatch-auto-w](./mutating-commands-own-their-journaling-not-a-dispatch-auto-w.md) — why every
+  addition is revertible.
+- [righthand-cli](./righthand-cli.md) — the product this loop defines.
+- [rollback-version-store-isomorphic-git-pure-js-over-system-gi](./rollback-version-store-isomorphic-git-pure-js-over-system-gi.md) — the
+  version store backing the undo half.
+
+## Source
+
+- \`src/commands/new.ts\` — scaffolds a command (extension).
+- \`src/commands/build.ts\` — LLM generates + smoke-tests + installs a command.
+- \`src/commands/changes.ts\`, \`src/commands/rollback.ts\`, \`src/commands/reset.ts\`
+  — the undo surface.
+- \`src/discover.ts\` — auto-discovery (extension is wiring-free).
+- Proven live in a fresh temp project: \`init → new mycmd → tools (discovered) →
+  run → changes (journaled) → rollback → tools (gone) → doctor (green)\`.
 `,
   "pages/entities/doctor-command.md": `---
 type: Entity
@@ -2265,6 +2733,7 @@ _Concrete named things will be listed here._
 y point — \`complete()\` —
 - [plugins command](./plugins-command.md) - What it is
 - [doctor command](./doctor-command.md) - **\`righthand doctor\`** is the read-only health & integration diagnostics command (capability [[c10-diagnostics]] / \`decisions/diagnostics-command-righthand-doct
+- [web command](./web-command.md) - **\`righthand web\`** is the command that launches the visual command-runner webapp. It is a long-running **foreground** command: it starts a stdlib HTTP server, 
 `,
   "pages/entities/llm-command.md": `---
 type: Entity
@@ -2328,6 +2797,7 @@ This is the seam that separates "a wrapper that compresses" from "a wrapper that
   - \`LlmResponse { text; model; tokensUsed; finishReason? }\`
   - \`resolveProvider(config, name?)\` → \`{ name, provider }\`. Resolution order: explicit name → \`config.defaults.provider\` → first listed provider → throw \`AUTH\`. Empty-string name is treated as unset (falls to default).
   - \`resolveApiKey(provider)\` → \`string | null\`. \`"env:VAR"\`→\`process.env[VAR]\`; plaintext→as-is; \`"keychain:ref"\`→\`null\` (deferred, \`// TODO keychain\`, no native dep in v1). See [credential-values-use-env-keychain-indirection-never-plainte](./credential-values-use-env-keychain-indirection-never-plainte.md).
+  - \`resolveEnvRef(value?)\` → \`string | undefined\`. Generalizes the \`env:\` indirection beyond \`apiKey\` to **\`baseURL\` and \`model\`**: \`"env:VAR"\`→\`process.env[VAR]\`, plaintext→as-is. \`complete()\` resolves \`provider.model\` and \`provider.baseURL\` through it, so a provider's key, endpoint, and model can all live in \`.env\` while \`config.json\` holds only \`env:\` refs. See [righthand-auto-loads-env-env-indirection-covers-all-provider](../../learnings/righthand-auto-loads-env-env-indirection-covers-all-provider.md).
   - \`complete(req, opts?: { config?; fetchFn?; signal? })\` → \`Promise<LlmResponse>\`. \`opts.fetchFn\` is a **TEST SEAM** — tests inject a fake fetch; no real network in the suite.
 - **Provider types & request shapes**:
   - \`openai-compatible\`: \`POST {baseURL||"https://api.openai.com/v1"}/chat/completions\`, header \`Authorization: Bearer <key>\`, body \`{model, messages, temperature, max_tokens}\`.
@@ -2335,6 +2805,7 @@ This is the seam that separates "a wrapper that compresses" from "a wrapper that
 - **Token accounting**: \`tokensUsed\` = \`usage.total_tokens\` when present, else \`usage.input_tokens + usage.output_tokens\`, else \`0\`. Flow upward as \`meta.tokens_used\` on the envelope (see [llm-command](./llm-command.md)).
 - **Error model**: no provider configured, unknown provider name, or unresolvable key → \`CommandError(EXIT.AUTH)\` (exit 4). HTTP failure → \`CommandError(EXIT.FAIL)\`.
 - **Configuration**: providers live in [config](./config.md) under \`config.providers.<name>\` (\`type\`, \`baseURL\`, \`apiKey\`, \`model\`, \`params\`); default provider = \`config.defaults.provider\`.
+- **\`.env\` loading**: \`config.ts\` calls \`loadDotEnv\` (\`src/dotenv.ts\`) for \`./.env\` and \`~/.righthand/.env\` before resolution — **real shell env always wins** (only unset keys are set); values are never logged. \`.env\` is the source for \`env:\` refs; \`config.json\` therefore stays committable with no machine-local wiring.
 
 ## Relationships
 
@@ -2456,6 +2927,49 @@ Being a **standalone, distributable product** means onboarding friction and conf
 
 - PRD interview (this session) — stated intent, opening scoping questions, the subprocess invocation model, the standalone-distributable product confirmation, the Node+TS runtime choice, the first-class plugin-system pillar, the LLM-augmentation pillar, the proposed self-recursive agent, and the persona-targeting lock. No code committed yet.
 `,
+  "pages/entities/web-command.md": `---
+type: Entity
+title: web command
+description: "**\`righthand web\`** is the command that launches the visual command-runner webapp. It is a long-running **foreground** command: it starts a stdlib HTTP server, "
+tags: [web-ui, command, c-web, cli, righthand]
+timestamp: "2026-07-24T14:20:35.168Z"
+---
+
+# web command
+
+**\`righthand web\`** is the command that launches the visual command-runner webapp. It is a long-running **foreground** command: it starts a stdlib HTTP server, prints the URL, optionally opens a browser, then blocks forever (Ctrl+C stops it). Auto-discovered from \`src/commands/web.ts\` (one file per command — see [command-auto-discovery-one-file-per-command-plugin-handlers](./command-auto-discovery-one-file-per-command-plugin-handlers.md)).
+
+The webapp is the alternate command surface to the CLI — a searchable, domain-grouped sidebar of every command, a form **auto-generated from each command's \`inputSchema\`**, and the standard envelope rendered back (ok / needs-human / fail badge, summary, pretty \`result\`, and meta: duration / tokens / change_id). See [web-ui-reuses-in-process-dispatch-not-subprocess-spawning](./web-ui-reuses-in-process-dispatch-not-subprocess-spawning.md) for why it shares dispatch with the CLI.
+
+## Why does it matter?
+
+It gives humans a visual way to discover and run righthand commands without remembering verbs/flags, while **inheriting the full trust model** — config layering, capability gates, and rollback all carry through because the server calls the same in-process \`dispatch()\` as the CLI. The mutating \`new → rollback\` cycle and real LLM calls both work end-to-end through the browser.
+
+## Details
+
+- **Location**: \`src/commands/web.ts\` (command) · \`src/web/server.ts\` (server) · \`src/web/app.html\` (SPA)
+- **Invocation**: \`righthand web [--port <n>] [--no-open]\`. Default port **8787**, default host \`127.0.0.1\`, auto-opens the OS browser unless \`--no-open\`.
+- **Descriptor**: \`name: "web"\`, \`plugin: "@righthand/core"\`, \`costTier: "free"\`. Declares **no** capabilities (it does no network/exec itself beyond opening a browser) → not capability-gated.
+- **HTTP surface**:
+  - \`GET /\` → the SPA HTML (inline CSS + vanilla JS, no framework, no build).
+  - \`GET /api/tools\` → \`{ tools: [...] }\` from \`getMergedManifest()\` — MCP-shaped descriptors for the whole command surface.
+  - \`POST /api/run\` → \`{ command, args, flags }\` → builds a \`CommandContext\` and calls \`dispatch()\` → returns \`{ envelope, exitCode }\`. 1MB body cap; invalid JSON / missing \`command\` / \`command==="web"\` → 400.
+- **Self-recursion guard**: the server refuses to run \`web\` inside itself (400), and the SPA hides \`web\` from the list — prevents nested servers.
+- **Consent model**: clicking *Run* is the human consent path; destructive/expensive commands still escalate to \`needs_human\` (exit 3) unless the form sends \`--yes\`. The gate is not bypassed.
+- **\`cli\` export**: \`{ args: { port, "no-open" } }\` — consumed by \`src/cli.ts\` auto-wiring (no shared-file edits).
+- **Tests**: \`test/web.test.ts\` — 7 tests (serves SPA, MCP-shaped \`/api/tools\`, \`/api/run\` happy-path, unknown→exit 2, \`web\`-refused→400, \`needs-human\`→exit 3, missing-command→400). Runs headlessly on an ephemeral port in an isolated temp HOME/cwd.
+
+## Relationships
+
+- [web-ui-reuses-in-process-dispatch-not-subprocess-spawning](./web-ui-reuses-in-process-dispatch-not-subprocess-spawning.md) — the core architecture choice: same \`dispatch()\` as the CLI.
+- [stateless-subprocess-invocation](./stateless-subprocess-invocation.md) — \`web\` is a foreground one-shot server, not a daemon; consistent with the stateless-per-invocation model.
+- [righthand-cli](./righthand-cli.md) — the product this command belongs to; a lifecycle command of the CLI.
+- [command-auto-discovery-one-file-per-command-plugin-handlers-](./command-auto-discovery-one-file-per-command-plugin-handlers.md) — how \`src/commands/web.ts\` is discovered (drop a file, no shared edits).
+
+## Lifecycle
+
+- **First added**: this turn (C-web). One of the auto-discovered core commands; appears in \`righthand tools --json\` and \`GET /api/tools\`.
+`,
   "pages/index.md": `# Pages
 
 Knowledge graph: concepts, entities, and artifacts that make up this project.
@@ -2475,6 +2989,10 @@ y point — \`complete()\` —
 - [Ops domain commands (C8)](./concepts/ops-domain-commands-c8.md) — What is it?
 - [plugins command](./entities/plugins-command.md) — What it is
 - [doctor command](./entities/doctor-command.md) — **\`righthand doctor\`** is the read-only health & integration diagnostics command (capability [[c10-diagnostics]] / \`decisions/diagnostics-command-righthand-doct
+- [Self-extending safe-undo loop](./concepts/self-extending-safe-undo-loop.md) — What is it?
+- [web command](./entities/web-command.md) — **\`righthand web\`** is the command that launches the visual command-runner webapp. It is a long-running **foreground** command: it starts a stdlib HTTP server,
+- [README.html interactive README](./artifacts/readme-html-interactive-readme.md) — A self-contained, interactive HTML README at the repo root — the rich, visual companion to the shorthand \`README.md\`. Built with the \`html-docs\` skill (feature-
+- [SETUP.md LLM onboarding runbook](./artifacts/setup-md-llm-onboarding-runbook.md) — \`SETUP.md\` (repo root) is an executable onboarding runbook written **for an LLM agent to follow** — the counterpart to the shorthand \`README.md\` and the interac
 `,
   "pages/TEMPLATES.md": `---
 type: Concept
@@ -2614,11 +3132,130 @@ righthand is a **distributable tool adopted by third parties**, and its output i
 - \`.specs/core-runtime/spec.md\` (C1) — "the runtime itself holds no secrets inline; credentials come from C4's keychain/env layer."
 - PRD never-break bar #4.
 `,
+  "rules/foundation-first-fan-out-leaf-parallel-build.md": `---
+type: Rule
+title: Foundation-first, fan-out-leaf parallel build
+description: Guideline
+tags: [orchestration, parallel-build, autonomous-build, build-order]
+timestamp: "2026-07-24T13:07:25.094Z"
+---
+
+# Foundation-first, fan-out-leaf parallel build
+
+## Guideline
+
+When autonomously building a coherent system across parallel agents, **build and
+independently verify the load-bearing foundation first**, THEN fan out leaf
+capabilities to parallel workers against those stable contracts.
+
+**Foundation = the shared spine.** For righthand that is: the contracts
+(\`src/contracts.ts\`), dispatch + capability sandbox (\`runtime.ts\`,
+\`capabilities.ts\`), auto-discovery (\`discover.ts\`, \`cli.ts\`), and the rollback
+store (\`versionstore.ts\`, \`journal.ts\`). Everything else hangs off these.
+
+**Fan-out = independent leaf work.** Once contracts are stable and verified, leaf
+capabilities (one command per file, read-only imports + new files) are
+collision-free to build in parallel.
+
+## When it applies
+
+Any multi-agent / parallel build of a system with a shared core. Also the right
+shape for a single agent doing autonomous "build everything" work: do the spine
+in one coherent pass, then the leaves.
+
+## How to execute it (the pattern that worked)
+
+1. Build the foundation in one continuous, coherent effort. Run the full suite
+   and confirm cold-start / budget bars independently before fanning out.
+2. **Assign single ownership of each shared file.** Parallel workers must not
+   edit the same file. For righthand: only the sandbox worker touched
+   \`runtime.ts\`; only the self-builder touched \`discover.ts\`; every other worker
+   owned its own \`src/commands/<name>.ts\` + \`test/<name>.test.ts\`.
+3. Make the CLI auto-discover subcommands from the discovered command table
+   (not hardcoded) so leaf workers can add commands with **zero shared-file
+   edits** — dropping a file is the only step.
+4. Fan out rounds: Round A = leaf capabilities depending only on the foundation;
+   Round B = capabilities depending on Round A modules.
+5. **After each parallel round, re-run the true integrated suite** — the
+   workers' reported counts are unreliable (see
+   [[parallel-agents-against-one-repo-report-unreliable-test-coun]]). Integrate and
+   smoke-test before proceeding.
+
+## Rationale
+
+The foundation must stay internally coherent (contracts, dispatch, exit codes,
+sandbox) — splitting it across agents produces merge conflicts and subtle
+inconsistencies. Leaf capabilities are independent by construction, so they
+parallelize cleanly. Single-owner shared files + auto-discovery are what made an
+8-parallel-agent build collision-free. Result: 166/166 tests, 20 commands,
+cold-start ~115ms, no merge conflicts survived.
+
+## Evidence
+
+Autonomous greenfield build of righthand v1 (PRD → specs → all 10 capabilities).
+Foundation verified at 42/42 (124ms), Round A integrated at 120/120 (113ms),
+Round B integrated at 166/166 (116ms). Signature loop proven live.
+`,
   "rules/index.md": `# Rules
 
 _Reusable heuristics, guidelines, and conventions will be listed here._
 - [Compress, don't relay](./compress-don-t-relay.md) - Guideline
 - [Credential values use env:/keychain: indirection — never plaintext on disk or in output](./credential-values-use-env-keychain-indirection-never-plainte.md) - Guideline
+- [Foundation-first, fan-out-leaf parallel build](./foundation-first-fan-out-leaf-parallel-build.md) - Guideline
+- [Structured command errors propagate — don't catch-all and wrap as needs_human](./structured-command-errors-propagate-don-t-catch-all-and-wrap.md) - Guideline
+`,
+  "rules/structured-command-errors-propagate-don-t-catch-all-and-wrap.md": `---
+type: Rule
+title: Structured command errors propagate — don't catch-all and wrap as needs_human
+description: Guideline
+tags: [exit-codes, command-handler, error-handling, commanderror, selfbuilder, llm]
+timestamp: "2026-07-24T13:48:19.072Z"
+---
+
+# Structured command errors propagate — don't catch-all and wrap as needs_human
+
+## Guideline
+
+In a command handler's \`try/catch\`, a **structured \`CommandError\`** (the errors
+that map to a specific exit code — AUTH→4, DEP_MISSING→5, CAPABILITY→6,
+USAGE→2) must **propagate** to dispatch, which derives the correct exit code from
+the envelope. Only **unexpected, non-\`CommandError\`** failures should be caught
+and wrapped as \`needs_human\` (exit 3).
+
+## When it applies
+
+Any command handler with a \`try/catch\` around a call that can throw structured
+errors — LLM provider calls, capability checks, wrapped-CLI failures, config
+resolution.
+
+## The pattern
+
+\`\`\`ts
+} catch (e) {
+  if (e instanceof CommandError) throw e;   // let dispatch pick the exit code
+  // only UNEXPECTED failures become needs_human
+  return { ok:false, ..., needs_human: \`... (\${(e as Error).message})\`, ... };
+}
+\`\`\`
+
+## Rationale
+
+Dispatch (\`src/runtime.ts\`) derives exit codes from envelope state. Catching a
+structured error and re-wrapping it as \`needs_human\` hides the precise cause and
+returns exit 3 (NEEDS_HUMAN) when the real signal is exit 4 (AUTH),
+exit 5 (DEP_MISSING), etc. \`llm ask\` already propagated correctly; \`build\`
+([[self-extending-safe-undo-loop]]) diverged — \`buildCommand\` caught *all* LLM
+failures including missing-provider AUTH and returned exit 3, inconsistent with
+\`llm ask\`'s exit 4. Fixed in \`src/selfbuilder.ts\` with the guard above.
+
+Keep every command handler consistent with [[command-output-envelope-and-exit-codes]]
+— the exit-code set is only useful if handlers let dispatch assign the codes.
+
+## Source
+
+- \`src/selfbuilder.ts\` — \`buildCommand\` catch block (the fix + explanatory comment).
+- \`src/errors.ts\` — \`CommandError\` definition.
+- \`src/runtime.ts\` — dispatch exit-code derivation.
 `,
 };
 var WIKI_PAGES = [
@@ -2653,37 +3290,50 @@ var WIKI_PAGES = [
     { path: "decisions/stateless-subprocess-invocation.md", label: "Subprocess-per-task invocation: righthand is stateless, not a daemon", group: "Decisions" },
     { path: "decisions/technical-approach-proposed-architecture.md", label: "Technical approach — proposed architecture", group: "Decisions" },
     { path: "decisions/web-research-search-as-a-capability-d6.md", label: "Web research / search as a capability (D6)", group: "Decisions" },
+    { path: "decisions/web-ui-reuses-in-process-dispatch-not-subprocess-spawning.md", label: "Web UI reuses in-process dispatch (not subprocess spawning)", group: "Decisions" },
+    { path: "learnings/righthand-runtime-footprint-holds-a-nested-git-repo-exclude-.md", label: ".righthand/ runtime footprint holds a nested git repo — exclude it when publishing the source repo", group: "Learnings" },
     { path: "learnings/bun-compile-binaries-are-58-109mb-crust-js-is-alpha-stage.md", label: "Bun --compile binaries are 58–109MB; crust.js is alpha-stage", group: "Learnings" },
     { path: "learnings/cold-start-177ms-after-discovery-isomorphic-git-kept-off-the.md", label: "Cold-start ~177ms after discovery; isomorphic-git kept off the cold path", group: "Learnings" },
+    { path: "learnings/config-set-must-json-coerce-arrays-objects-the-layered-merge.md", label: "config set must JSON-coerce arrays/objects — the layered merge silently drops wrong-typed values", group: "Learnings" },
     { path: "learnings/expensive-commands-can-t-show-then-confirm-via-dispatch-the-.md", label: "expensive commands can't show-then-confirm via dispatch — the approval gate preempts run()", group: "Learnings" },
+    { path: "learnings/inline-mermaid-svgs-fail-silently-on-import-var-color-mix-re.md", label: "Inline mermaid SVGs fail silently on @import, var(), color-mix() — resolve to explicit hex before embedding", group: "Learnings" },
     { path: "learnings/index.md", label: "Learnings", group: "Learnings" },
     { path: "learnings/net-llm-capability-gate-llm-commands-are-denied-before-run-u.md", label: "net:llm capability gate: llm commands are denied before run() unless allowed", group: "Learnings" },
     { path: "learnings/node-test-rejects-top-level-await-anywhere-in-the-import-gra.md", label: "node --test rejects top-level await anywhere in the import graph", group: "Learnings" },
     { path: "learnings/node-strip-only-typescript-rejects-parameter-properties-enum.md", label: "Node strip-only TypeScript rejects parameter properties, enums, and namespaces", group: "Learnings" },
     { path: "learnings/operational-task-failure-modes-of-coding-agents.md", label: "Operational-task failure modes of coding agents", group: "Learnings" },
     { path: "learnings/ops-commands-declaring-capabilities-are-capability-gated-bef.md", label: "Ops commands declaring capabilities are capability-gated before they run — tests must grant caps", group: "Learnings" },
+    { path: "learnings/parallel-agents-against-one-repo-report-unreliable-test-coun.md", label: "Parallel agents against one repo report unreliable test counts", group: "Learnings" },
     { path: "learnings/resolveactivescope-falls-back-to-user-until-a-project-footpr.md", label: "resolveActiveScope falls back to \"user\" until a project footprint exists", group: "Learnings" },
+    { path: "learnings/righthand-auto-loads-env-env-indirection-covers-all-provider.md", label: "righthand auto-loads .env; env: indirection covers all provider fields", group: "Learnings" },
+    { path: "learnings/wrapped-cli-ops-commands-must-surface-non-zero-exits-ci-had-.md", label: "Wrapped-CLI ops commands must surface non-zero exits — ci had the bug, logs/tasks/docs likely do too", group: "Learnings" },
     { path: "pages/TEMPLATES.md", label: "Page Templates", group: "Pages" },
     { path: "pages/index.md", label: "Pages", group: "Pages" },
     { path: "pages/artifacts/index.md", label: "Artifacts", group: "Pages / Artifacts" },
+    { path: "pages/artifacts/readme-html-interactive-readme.md", label: "README.html interactive README", group: "Pages / Artifacts" },
     { path: "pages/artifacts/righthand-cli-prd.md", label: "righthand CLI PRD", group: "Pages / Artifacts" },
     { path: "pages/artifacts/righthand-prd.md", label: "righthand PRD", group: "Pages / Artifacts" },
     { path: "pages/artifacts/righthand-problem-research-report.md", label: "Righthand problem research report", group: "Pages / Artifacts" },
+    { path: "pages/artifacts/setup-md-llm-onboarding-runbook.md", label: "SETUP.md LLM onboarding runbook", group: "Pages / Artifacts" },
     { path: "pages/concepts/command-authoring-and-scaffolding.md", label: "Command authoring and scaffolding", group: "Pages / Concepts" },
     { path: "pages/concepts/command-output-envelope-and-exit-codes.md", label: "Command output envelope and exit codes", group: "Pages / Concepts" },
     { path: "pages/concepts/index.md", label: "Concepts", group: "Pages / Concepts" },
     { path: "pages/concepts/factory-reset-capability-c-reset.md", label: "Factory reset capability (C-RESET)", group: "Pages / Concepts" },
     { path: "pages/concepts/ops-domain-commands-c8.md", label: "Ops domain commands (C8)", group: "Pages / Concepts" },
+    { path: "pages/concepts/self-extending-safe-undo-loop.md", label: "Self-extending safe-undo loop", group: "Pages / Concepts" },
     { path: "pages/entities/doctor-command.md", label: "doctor command", group: "Pages / Entities" },
     { path: "pages/entities/index.md", label: "Entities", group: "Pages / Entities" },
     { path: "pages/entities/llm-command.md", label: "llm command", group: "Pages / Entities" },
     { path: "pages/entities/llm-provider-integration.md", label: "LLM provider integration", group: "Pages / Entities" },
     { path: "pages/entities/plugins-command.md", label: "plugins command", group: "Pages / Entities" },
     { path: "pages/entities/righthand-cli.md", label: "righthand cli", group: "Pages / Entities" },
+    { path: "pages/entities/web-command.md", label: "web command", group: "Pages / Entities" },
     { path: "preferences/index.md", label: "Preferences", group: "Preferences" },
     { path: "rules/compress-don-t-relay.md", label: "Compress, don't relay", group: "Rules" },
     { path: "rules/credential-values-use-env-keychain-indirection-never-plainte.md", label: "Credential values use env:/keychain: indirection — never plaintext on disk or in output", group: "Rules" },
-    { path: "rules/index.md", label: "Rules", group: "Rules" }
+    { path: "rules/foundation-first-fan-out-leaf-parallel-build.md", label: "Foundation-first, fan-out-leaf parallel build", group: "Rules" },
+    { path: "rules/index.md", label: "Rules", group: "Rules" },
+    { path: "rules/structured-command-errors-propagate-don-t-catch-all-and-wrap.md", label: "Structured command errors propagate — don't catch-all and wrap as needs_human", group: "Rules" }
 ];
 (function(){
 var a=document.getElementById("hljs-light"),d=document.getElementById("hljs-dark"),t=document.getElementById("themeToggle"),i=document.getElementById("themeIcon");

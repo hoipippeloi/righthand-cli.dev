@@ -7,3 +7,4 @@
 - [Command auto-discovery: one file per command, plugin handlers stay lazy](./command-auto-discovery-one-file-per-command-plugin-handlers-.md) - Context
 - [Mutating commands own their journaling (not a dispatch auto-wrap)](./mutating-commands-own-their-journaling-not-a-dispatch-auto-w.md) - Context
 - [Web UI reuses in-process dispatch (not subprocess spawning)](./web-ui-reuses-in-process-dispatch-not-subprocess-spawning.md) - Context
+- [Publish-time build to dist/ via npm prepare (compiled JS for npm, source for dev)](./publish-time-build-to-dist-via-npm-prepare-compiled-js-for-n.md) - Context
