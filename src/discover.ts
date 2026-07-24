@@ -56,7 +56,9 @@ async function loadCore(): Promise<Map<string, CoreCommand>> {
   }
   const entries = await Promise.all(
     files
-      .filter((f) => f.endsWith(".ts") && !f.startsWith("_"))
+      // Accept .ts (dev: src/commands) and .js (published: dist/commands). HERE resolves
+      // via import.meta.url to src/ in dev and dist/ when compiled — same code path either way.
+      .filter((f) => (f.endsWith(".ts") || f.endsWith(".js")) && !f.startsWith("_"))
       .map(async (f) => {
         try {
           const mod = (await import("./commands/" + f)) as {

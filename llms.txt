@@ -18,7 +18,7 @@ When NOT to use it: editing application source, reading code to reason about it,
 npm install -g hoipippeloi/righthand-cli.dev      # from GitHub
 ```
 
-Requires Node 20+ (24+ recommended). No build step. Runtime deps are just `citty` + `isomorphic-git`. Verify:
+Requires Node 20+ (24+ recommended). Runtime deps: `citty` + `isomorphic-git` (auto-builds to JS on install). Verify:
 
 ```bash
 righthand version          # → righthand 0.0.1
