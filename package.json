@@ -4,13 +4,13 @@
   "description": "The coding agent's always-available operations right-hand.",
   "license": "UNLICENSED",
   "author": "creatuluw",
-  "homepage": "https://github.com/creatuluw/righthand.cli#readme",
+  "homepage": "https://github.com/hoipippeloi/righthand-cli.dev#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/creatuluw/righthand.cli.git"
+    "url": "git+https://github.com/hoipippeloi/righthand-cli.dev.git"
   },
   "bugs": {
-    "url": "https://github.com/creatuluw/righthand.cli/issues"
+    "url": "https://github.com/hoipippeloi/righthand-cli.dev/issues"
   },
   "keywords": [
     "cli",

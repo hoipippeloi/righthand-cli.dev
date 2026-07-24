@@ -16,9 +16,7 @@ Node 24+ / Bun · no build step (native TS type-stripping) · only runtime deps:
 ## Quick start
 
 ```bash
-git clone <repo> righthand.cli && cd righthand.cli
-npm install
-npm link            # puts `righthand` on your PATH
+npm install -g hoipippeloi/righthand-cli.dev   # install from GitHub
 
 righthand                    # list commands
 righthand tools --json       # MCP-shaped discovery (what an agent calls)

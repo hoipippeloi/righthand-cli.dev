@@ -27,22 +27,26 @@ command -v righthand      # present? prints a path if installed
 
 ## Step 1 — Ensure righthand is installed
 
-If Step 0 showed `righthand` on PATH, **skip to Step 2.** Otherwise install it:
+If Step 0 showed `righthand` on PATH, **skip to Step 2.** Otherwise install it from GitHub:
 
 ```bash
-# Preferred (once published):
-npm install -g righthand
+npm install -g hoipippeloi/righthand-cli.dev
+# equivalent explicit form:
+# npm install -g https://github.com/hoipippeloi/righthand-cli.dev.git
+```
 
-# Fallback (from source — use if the line above fails / not yet published):
-git clone <righthand-repo-url> /tmp/righthand.cli
-cd /tmp/righthand.cli && npm install && npm link && cd -   # back to project root
+To develop on righthand itself, clone + link instead:
+
+```bash
+git clone https://github.com/hoipippeloi/righthand-cli.dev /tmp/righthand-cli.dev
+cd /tmp/righthand-cli.dev && npm install && npm link && cd -   # back to project root
 ```
 
 **Verify:**
 ```bash
 righthand version    # prints a JSON envelope with "version":"0.0.x", exit 0
 ```
-**On failure:** `npm install -g` needs network + npm registry access; if absent, you must use the from-source fallback. If `npm link` fails on permissions, retry with the appropriate prefix for the OS. Do not continue until `righthand version` succeeds.
+**On failure:** the install needs network access to GitHub + npm (for deps). If `npm install -g` fails on permissions, retry with the appropriate prefix for the OS (`sudo` / an admin shell). Do not continue until `righthand version` succeeds.
 
 ## Step 2 — Initialize the project footprint
 
