@@ -7,7 +7,7 @@ okf_version: "0.1"
 <!-- wiki-nav:start -->
 ## Navigation map
 
-Auto-generated detailed index of every docs/wiki/ concept — the map the LLM uses to locate information. 66 concept(s). Regenerated on init and on wiki_mark_synced. Generated 2026-07-24T17:22:01.874Z.
+Auto-generated detailed index of every docs/wiki/ concept — the map the LLM uses to locate information. 71 concept(s). Regenerated on init and on wiki_mark_synced. Generated 2026-07-24T18:19:42.267Z.
 
 Each entry: `concept-id` (pass to wiki_get) — title — description.
 
@@ -22,6 +22,7 @@ Each entry: `concept-id` (pass to wiki_get) — title — description.
 
 ### Pages
 
+- `pages/artifacts/llms-txt-agent-operating-instructions` — llms.txt agent operating instructions — `llms.txt` (repo root) — a root-level markdown file following the [llms.txt convention](https://llmstxt.org) (well-known root path LLMs are taught to read for p
 - `pages/artifacts/readme-html-interactive-readme` — README.html interactive README — A self-contained, interactive HTML README at the repo root — the rich, visual companion to the shorthand `README.md`. Built with the `html-docs` skill (feature-
 - `pages/artifacts/righthand-cli-prd` — righthand CLI PRD — The initiative-level Product Requirements Document for [[righthand-cli]] — the why, scope, and 10 high-level capabilities, written so a spec-writer can expand e
 - `pages/artifacts/righthand-prd` — righthand PRD — The authoritative product-definition document for the righthand initiative, produced via the `new-prd-interview` skill.
@@ -36,6 +37,7 @@ Each entry: `concept-id` (pass to wiki_get) — title — description.
 - `pages/entities/llm-command` — llm command — **`righthand llm`** is the user-facing command that wraps [[llm-provider-integration]]'s `complete()`. It is the thinnest possible surface over the LLM: send a 
 - `pages/entities/llm-provider-integration` — LLM provider integration — **LLM provider integration** (`src/llm.ts`) is the single load-bearing module every reasoning capability builds on. It exposes one entry point — `complete()` —
 - `pages/entities/plugins-command` — plugins command — What it is
+- `pages/entities/publish-build-pipeline` — Publish build pipeline — **The publish build pipeline** compiles the TypeScript source in `src/` into ESM JavaScript in `dist/` at publish time, so the published npm package's `bin` is
 - `pages/entities/righthand-cli` — righthand cli — **righthand cli** is the product this repository builds: an always-available CLI that a **main / coding LLM** can hand tasks off to. The coding agent focuses on
 - `pages/entities/web-command` — web command — **`righthand web`** is the command that launches the visual command-runner webapp. It is a long-running **foreground** command: it starts a stdlib HTTP server, 
 - `pages/TEMPLATES` — Page Templates — Reference templates for Concept, Entity, and Artifact pages. Follow these when using wiki_note_page.
@@ -59,6 +61,7 @@ Each entry: `concept-id` (pass to wiki_get) — title — description.
 - `decisions/node-typescript-is-the-runtime-for-righthand` — Node + TypeScript is the runtime for righthand — Context
 - `decisions/plugin-sandbox-capability-declaration-permission-flags-subpr` — Plugin sandbox: capability declaration + permission flags, subprocess isolation for untrusted — Context
 - `decisions/project-scoped-footprint-with-config-layering` — Project-scoped footprint with config layering — Context
+- `decisions/publish-time-build-to-dist-via-npm-prepare-compiled-js-for-n` — Publish-time build to dist/ via npm prepare (compiled JS for npm, source for dev) — Context
 - `decisions/research-backend-is-llm-driven-not-a-hard-coupled-search-api` — Research backend is LLM-driven, not a hard-coupled search API — Context
 - `decisions/righthand-core-architecture` — righthand core architecture — Context
 - `decisions/rollback-and-reset-capability-c-reset` — Rollback and reset capability (C-RESET) — Context
@@ -82,11 +85,13 @@ Each entry: `concept-id` (pass to wiki_get) — title — description.
 - `learnings/bun-compile-binaries-are-58-109mb-crust-js-is-alpha-stage` — Bun --compile binaries are 58–109MB; crust.js is alpha-stage — Two non-obvious facts surfaced while evaluating the CLI framework (see
 - `learnings/cold-start-177ms-after-discovery-isomorphic-git-kept-off-the` — Cold-start ~177ms after discovery; isomorphic-git kept off the cold path — After wiring auto-discovery (9 core command files, each importing its deps), `righthand tools` subprocess cold-start rose from the **94 ms** baseline (3 command
 - `learnings/config-set-must-json-coerce-arrays-objects-the-layered-merge` — config set must JSON-coerce arrays/objects — the layered merge silently drops wrong-typed values — What happened
+- `learnings/err-unsupported-node-modules-type-stripping-published-bin-mu` — ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING — published bin must be .js, never .ts — What happened
 - `learnings/expensive-commands-can-t-show-then-confirm-via-dispatch-the-` — expensive commands can't show-then-confirm via dispatch — the approval gate preempts run() — When a command sets `costTier: "expensive"` (or `destructive: true`), the dispatch-level approval gate in `src/runtime.ts` / `src/capabilities.ts#requiresApprov
 - `learnings/inline-mermaid-svgs-fail-silently-on-import-var-color-mix-re` — Inline mermaid SVGs fail silently on @import, var(), color-mix() — resolve to explicit hex before embedding — When embedding a mermaid-rendered SVG **inline** in an HTML doc (e.g. `README.html` built via the `html-docs` skill + `pretty-mermaid`), the raw SVG is not drop
 - `learnings/net-llm-capability-gate-llm-commands-are-denied-before-run-u` — net:llm capability gate: llm commands are denied before run() unless allowed — The `llm` command (and any future `righthand` command) declares `capabilities: ["net:llm"]` in its descriptor. Dispatch (`src/runtime.ts`) runs `checkCapabiliti
 - `learnings/node-strip-only-typescript-rejects-parameter-properties-enum` — Node strip-only TypeScript rejects parameter properties, enums, and namespaces — When running `.ts` files directly on **Node 22+/24** (native type-stripping) — and on **Bun**, which behaves the same way — only *type-only* syntax is stripped.
 - `learnings/node-test-rejects-top-level-await-anywhere-in-the-import-gra` — node --test rejects top-level await anywhere in the import graph — `node --test` fails an entire test file with "Detected unsettled top-level await" if **any** module in the file's import graph uses top-level `await` — even a d
+- `learnings/npm-git-dependency-on-windows-installs-as-a-symlink-to-a-del` — npm git-dependency on Windows installs as a symlink to a deleted temp clone — no dist/, no bin shim — What happened
 - `learnings/operational-task-failure-modes-of-coding-agents` — Operational-task failure modes of coding agents — Research (web-research skill, three parallel subagents, cited) into why coding agents — Claude Code, Codex, Cursor, Aider, etc. — degrade the moment an *operati
 - `learnings/ops-commands-declaring-capabilities-are-capability-gated-bef` — Ops commands declaring capabilities are capability-gated before they run — tests must grant caps — When implementing the C8 ops command groups (`ci`, `logs`, `docs`, `tasks`, `admin`), each command declares `capabilities` (e.g. `["exec:gh","net:api.github.com
 - `learnings/parallel-agents-against-one-repo-report-unreliable-test-coun` — Parallel agents against one repo report unreliable test counts — When multiple worker agents run in parallel **against the same repo working
