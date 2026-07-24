@@ -690,6 +690,7 @@ Accepted — locked during the PRD interview (Q5). Pro-dev-with-ops is the desig
 - [Command auto-discovery: one file per command, plugin handlers stay lazy](./command-auto-discovery-one-file-per-command-plugin-handlers-.md) - Context
 - [Mutating commands own their journaling (not a dispatch auto-wrap)](./mutating-commands-own-their-journaling-not-a-dispatch-auto-w.md) - Context
 - [Web UI reuses in-process dispatch (not subprocess spawning)](./web-ui-reuses-in-process-dispatch-not-subprocess-spawning.md) - Context
+- [Publish-time build to dist/ via npm prepare (compiled JS for npm, source for dev)](./publish-time-build-to-dist-via-npm-prepare-compiled-js-for-n.md) - Context
 `,
   "decisions/llm-augmented-commands-as-a-first-class-pillar.md": `---
 type: Decision
@@ -914,9 +915,13 @@ The runtime was locked to Node + TypeScript ([[node-typescript-is-the-runtime-fo
 - \`tsc --noEmit\` becomes a *lint/typecheck* tool, not a build tool.
 - This **refines the build-tooling consequence** of [[node-typescript-is-the-runtime-for-righthand]] (which named \`tsc\`/\`esbuild\`); it supersedes that one line — the Node+TS runtime choice itself is unchanged.
 
+## Refinement (publish path) — 2026-07-24
+
+"No build step" applies to the **development / runtime-from-source** experience and is unchanged there. It does **not** cover the published npm artifact: Node deliberately disables type-stripping for any \`.ts\` under \`node_modules\` ([[err-unsupported-node-modules-type-stripping-published-bin-must-be-js-never-ts]]), so the package's \`bin\` must ship compiled \`.js\`. That is built at publish time via \`npm prepare\` (esbuild, devDep-only) into \`dist/\` — **this decision is clarified, not superseded, by** [[publish-time-build-to-dist-via-npm-prepare-compiled-js-for-n]]. Both are true at once: dev runs source directly; the npm install runs compiled JS. See also [[publish-build-pipeline]] for the mechanism.
+
 ## Verified (Phase 0 slice, 2026-07-24)
 
-\`bin/righthand.ts\` runs directly under Node 24 with zero build step; 8/8 \`node --test\` tests green; cold-start 94ms (under the 200ms C1 target).
+\`bin/righthand.ts\` runs directly under Node 24 with zero build step; 8/8 \`node --test\` tests green; cold-start 94ms (under the 200ms C1 target). (Later baselines: ~115ms once full discovery was wired, ~80ms for the compiled \`dist/\` artifact.)
 `,
   "decisions/node-typescript-is-the-runtime-for-righthand.md": `---
 type: Decision
@@ -1036,6 +1041,41 @@ Per-project footprint gives isolation + portability (the whole footprint is self
 - Config resolution implements documented precedence (project overrides user).
 - Credential storage lives ONLY in \`~/.righthand/\` — never written into the project footprint (so the footprint can be shared/committed safely).
 - State/rollback ([[rollback-and-reset-capability-c-reset]]) is scoped per footprint.
+`,
+  "decisions/publish-time-build-to-dist-via-npm-prepare-compiled-js-for-n.md": `---
+type: Decision
+title: Publish-time build to dist/ via npm prepare (compiled JS for npm, source for dev)
+description: Context
+tags: [packaging, distribution, build, npm, cold-start]
+status: accepted
+timestamp: "2026-07-24T17:47:55.108Z"
+---
+
+# Publish-time build to dist/ via npm prepare (compiled JS for npm, source for dev)
+
+## Context
+
+The published npm package was broken: its \`bin\` pointed at \`./bin/righthand.ts\` and Node refuses to type-strip any \`.ts\` under \`node_modules\` ([[err-unsupported-node-modules-type-stripping-published-bin-must-be-js-never-ts]]). The project's source uses \`.ts\`-extension imports (\`allowImportingTsExtensions: true\`, \`noEmit: true\`) so it can be run directly via \`node bin/righthand.ts\` in dev — a first-class DX decision ([[no-build-step-run-typescript-source-directly]]).
+
+## The choice
+
+Compile \`src/\` → \`dist/\` (ESM \`.js\`) at publish time only, wired to npm \`prepare\` (runs on git install, \`npm pack\`, \`npm publish\` — NOT on consumer registry installs, so it's safe without devDeps there). \`bin\` → \`./dist/cli.js\`. \`files: ["dist"]\` ships a lean tarball. Dev is unchanged — still runs source directly, no build step.
+
+Compiler is **esbuild, per-file (not bundled)**, with a scoped \`.ts\`→\`.js\` specifier rewrite. Per-file (not bundle) is load-bearing: \`src/discover.ts\` dynamically \`import()\`s command files by scanning a directory at runtime — bundling can't see those. Per-file + a one-line \`discover.ts\` change (accept \`.ts\`||\`.js\`, since \`import.meta.url\` resolves \`HERE\` to \`src/\` in dev and \`dist/\` when compiled) keeps a **single discovery path** that works identically in both. Footprint/user commands stay \`.ts\` (they live outside \`node_modules\`, so Node strips them fine).
+
+## Alternatives considered
+
+- **tsx runtime shim** (bin = a \`.js\` that imports \`tsx\` to run the source): smallest code change, keeps \`.ts\` everywhere, but adds a heavy runtime dep (esbuild via tsx) and ~+50–100ms cold start — likely blowing the locked 200ms C1 bar ([[lock-success-criteria-measurable-metrics-never-break-bars]]) and breaking the "only citty + isomorphic-git" ethos. Rejected.
+- **Bundle to one file**: cleanest artifact + fastest startup, but requires replacing dynamic command discovery with a build-time static import map — a bigger refactor of a first-class pillar ([[command-auto-discovery-one-file-per-command-plugin-handlers-]]). Deferred (possible later optimization; per-file already improved cold start to ~80ms).
+- **\`tsc\` emit**: blocked — \`allowImportingTsExtensions\` (required by the source's \`.ts\` imports) forces \`noEmit\`. esbuild tolerates \`.ts\` specifiers.
+
+## Consequences
+
+- \`npm install -g https://github.com/hoipippeloi/righthand-cli.dev/tarball/main\` works (the GitHub **tarball** URL). ⚠️ The \`owner/repo\` git shorthand does NOT work for *global* installs — npm's git-dep flow is buggy (npm/cli#3692, npm 7–11): it clones to a temp dir, runs \`prepare\`, then deletes the clone + install dir → dangling symlink → \`command not found\`. See [[npm-git-dependency-on-windows-installs-as-a-symlink-to-a-del]].
+- Zero new runtime deps. esbuild is devDep-only.
+- Cold start *improved*: ~80ms median (vs ~115ms source) — compiled JS skips type-stripping.
+- Adds \`scripts/build.mjs\` + \`prepare\`/\`build\` npm scripts. **\`dist/\` is COMMITTED** (un-gitignored) so the GitHub tarball ships runnable JS — a tarball-URL install needs no build step at all and survives \`--omit=dev\` / \`--ignore-scripts\`. (Future clean path: publish to the npm registry.)
+- Clarifies (does NOT supersede) [[no-build-step-run-typescript-source-directly]]: "no build step" applies to the **development/runtime-from-source** experience; the **published npm artifact** is compiled JS. Both are true simultaneously.
 `,
   "decisions/research-backend-is-llm-driven-not-a-hard-coupled-search-api.md": `---
 type: Decision
@@ -1551,7 +1591,7 @@ okf_version: "0.1"
 <!-- wiki-nav:start -->
 ## Navigation map
 
-Auto-generated detailed index of every docs/wiki/ concept — the map the LLM uses to locate information. 53 concept(s). Regenerated on init and on wiki_mark_synced. Generated 2026-07-24T13:05:17.988Z.
+Auto-generated detailed index of every docs/wiki/ concept — the map the LLM uses to locate information. 66 concept(s). Regenerated on init and on wiki_mark_synced. Generated 2026-07-24T17:22:01.874Z.
 
 Each entry: \`concept-id\` (pass to wiki_get) — title — description.
 
@@ -1566,18 +1606,22 @@ Each entry: \`concept-id\` (pass to wiki_get) — title — description.
 
 ### Pages
 
+- \`pages/artifacts/readme-html-interactive-readme\` — README.html interactive README — A self-contained, interactive HTML README at the repo root — the rich, visual companion to the shorthand \`README.md\`. Built with the \`html-docs\` skill (feature-
 - \`pages/artifacts/righthand-cli-prd\` — righthand CLI PRD — The initiative-level Product Requirements Document for [[righthand-cli]] — the why, scope, and 10 high-level capabilities, written so a spec-writer can expand e
 - \`pages/artifacts/righthand-prd\` — righthand PRD — The authoritative product-definition document for the righthand initiative, produced via the \`new-prd-interview\` skill.
 - \`pages/artifacts/righthand-problem-research-report\` — Righthand problem research report — A web-research report (with citations) produced during the Phase-1 PRD brainstorm to ground the righthand problem statement in real evidence rather than assumpt
+- \`pages/artifacts/setup-md-llm-onboarding-runbook\` — SETUP.md LLM onboarding runbook — \`SETUP.md\` (repo root) is an executable onboarding runbook written **for an LLM agent to follow** — the counterpart to the shorthand \`README.md\` and the interac
 - \`pages/concepts/command-authoring-and-scaffolding\` — Command authoring and scaffolding — What is it?
 - \`pages/concepts/command-output-envelope-and-exit-codes\` — Command output envelope and exit codes — What is it?
 - \`pages/concepts/factory-reset-capability-c-reset\` — Factory reset capability (C-RESET) — What is it?
 - \`pages/concepts/ops-domain-commands-c8\` — Ops domain commands (C8) — What is it?
+- \`pages/concepts/self-extending-safe-undo-loop\` — Self-extending safe-undo loop — What is it?
 - \`pages/entities/doctor-command\` — doctor command — **\`righthand doctor\`** is the read-only health & integration diagnostics command (capability [[c10-diagnostics]] / \`decisions/diagnostics-command-righthand-doct
 - \`pages/entities/llm-command\` — llm command — **\`righthand llm\`** is the user-facing command that wraps [[llm-provider-integration]]'s \`complete()\`. It is the thinnest possible surface over the LLM: send a 
 - \`pages/entities/llm-provider-integration\` — LLM provider integration — **LLM provider integration** (\`src/llm.ts\`) is the single load-bearing module every reasoning capability builds on. It exposes one entry point — \`complete()\` —
 - \`pages/entities/plugins-command\` — plugins command — What it is
 - \`pages/entities/righthand-cli\` — righthand cli — **righthand cli** is the product this repository builds: an always-available CLI that a **main / coding LLM** can hand tasks off to. The coding agent focuses on
+- \`pages/entities/web-command\` — web command — **\`righthand web\`** is the command that launches the visual command-runner webapp. It is a long-running **foreground** command: it starts a stdlib HTTP server, 
 - \`pages/TEMPLATES\` — Page Templates — Reference templates for Concept, Entity, and Artifact pages. Follow these when using wiki_note_page.
 
 ### Decisions
@@ -1608,23 +1652,32 @@ Each entry: \`concept-id\` (pass to wiki_get) — title — description.
 - \`decisions/stateless-subprocess-invocation\` — Subprocess-per-task invocation: righthand is stateless, not a daemon — Context
 - \`decisions/technical-approach-proposed-architecture\` — Technical approach — proposed architecture — Context
 - \`decisions/web-research-search-as-a-capability-d6\` — Web research / search as a capability (D6) — Context
+- \`decisions/web-ui-reuses-in-process-dispatch-not-subprocess-spawning\` — Web UI reuses in-process dispatch (not subprocess spawning) — Context
 
 ### Rules
 
 - \`rules/compress-don-t-relay\` — Compress, don't relay — Guideline
 - \`rules/credential-values-use-env-keychain-indirection-never-plainte\` — Credential values use env:/keychain: indirection — never plaintext on disk or in output — Guideline
+- \`rules/foundation-first-fan-out-leaf-parallel-build\` — Foundation-first, fan-out-leaf parallel build — Guideline
+- \`rules/structured-command-errors-propagate-don-t-catch-all-and-wrap\` — Structured command errors propagate — don't catch-all and wrap as needs_human — Guideline
 
 ### Learnings
 
 - \`learnings/bun-compile-binaries-are-58-109mb-crust-js-is-alpha-stage\` — Bun --compile binaries are 58–109MB; crust.js is alpha-stage — Two non-obvious facts surfaced while evaluating the CLI framework (see
 - \`learnings/cold-start-177ms-after-discovery-isomorphic-git-kept-off-the\` — Cold-start ~177ms after discovery; isomorphic-git kept off the cold path — After wiring auto-discovery (9 core command files, each importing its deps), \`righthand tools\` subprocess cold-start rose from the **94 ms** baseline (3 command
+- \`learnings/config-set-must-json-coerce-arrays-objects-the-layered-merge\` — config set must JSON-coerce arrays/objects — the layered merge silently drops wrong-typed values — What happened
 - \`learnings/expensive-commands-can-t-show-then-confirm-via-dispatch-the-\` — expensive commands can't show-then-confirm via dispatch — the approval gate preempts run() — When a command sets \`costTier: "expensive"\` (or \`destructive: true\`), the dispatch-level approval gate in \`src/runtime.ts\` / \`src/capabilities.ts#requiresApprov
+- \`learnings/inline-mermaid-svgs-fail-silently-on-import-var-color-mix-re\` — Inline mermaid SVGs fail silently on @import, var(), color-mix() — resolve to explicit hex before embedding — When embedding a mermaid-rendered SVG **inline** in an HTML doc (e.g. \`README.html\` built via the \`html-docs\` skill + \`pretty-mermaid\`), the raw SVG is not drop
 - \`learnings/net-llm-capability-gate-llm-commands-are-denied-before-run-u\` — net:llm capability gate: llm commands are denied before run() unless allowed — The \`llm\` command (and any future \`righthand\` command) declares \`capabilities: ["net:llm"]\` in its descriptor. Dispatch (\`src/runtime.ts\`) runs \`checkCapabiliti
 - \`learnings/node-strip-only-typescript-rejects-parameter-properties-enum\` — Node strip-only TypeScript rejects parameter properties, enums, and namespaces — When running \`.ts\` files directly on **Node 22+/24** (native type-stripping) — and on **Bun**, which behaves the same way — only *type-only* syntax is stripped.
 - \`learnings/node-test-rejects-top-level-await-anywhere-in-the-import-gra\` — node --test rejects top-level await anywhere in the import graph — \`node --test\` fails an entire test file with "Detected unsettled top-level await" if **any** module in the file's import graph uses top-level \`await\` — even a d
 - \`learnings/operational-task-failure-modes-of-coding-agents\` — Operational-task failure modes of coding agents — Research (web-research skill, three parallel subagents, cited) into why coding agents — Claude Code, Codex, Cursor, Aider, etc. — degrade the moment an *operati
 - \`learnings/ops-commands-declaring-capabilities-are-capability-gated-bef\` — Ops commands declaring capabilities are capability-gated before they run — tests must grant caps — When implementing the C8 ops command groups (\`ci\`, \`logs\`, \`docs\`, \`tasks\`, \`admin\`), each command declares \`capabilities\` (e.g. \`["exec:gh","net:api.github.com
+- \`learnings/parallel-agents-against-one-repo-report-unreliable-test-coun\` — Parallel agents against one repo report unreliable test counts — When multiple worker agents run in parallel **against the same repo working
 - \`learnings/resolveactivescope-falls-back-to-user-until-a-project-footpr\` — resolveActiveScope falls back to "user" until a project footprint exists — \`resolveActiveScope()\` in \`src/footprint.ts\` returns **"project"** only when \`./.righthand/\` (or \`.git/\`) exists in the project root; otherwise it returns **"us
+- \`learnings/righthand-auto-loads-env-env-indirection-covers-all-provider\` — righthand auto-loads .env; env: indirection covers all provider fields — What changed
+- \`learnings/righthand-runtime-footprint-holds-a-nested-git-repo-exclude-\` — .righthand/ runtime footprint holds a nested git repo — exclude it when publishing the source repo — When publishing the **source** repo to GitHub, the project's own \`./.righthand/\` must be gitignored entirely (not committed). It is righthand's runtime footprin
+- \`learnings/wrapped-cli-ops-commands-must-surface-non-zero-exits-ci-had-\` — Wrapped-CLI ops commands must surface non-zero exits — ci had the bug, logs/tasks/docs likely do too — The gotcha
 <!-- wiki-nav:end -->
 
 An [OKF](https://github.com/earendil-works/okf) bundle documenting this project.
@@ -1725,6 +1778,39 @@ This also matters because capabilities are deny-by-default ([[plugin-sandbox-cap
 - \`src/config.ts\` — \`coerceValue()\` (~line 162) and \`setPath()\` (~line 157)
 - \`SETUP.md\` Step 5 — the capability-grant flow that surfaced the bug
 `,
+  "learnings/err-unsupported-node-modules-type-stripping-published-bin-mu.md": `---
+type: Learning
+title: ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING — published bin must be .js, never .ts
+description: What happened
+tags: [packaging, node, typescript, npm, distribution]
+timestamp: "2026-07-24T17:47:55.108Z"
+---
+
+# ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING — published bin must be .js, never .ts
+
+## What happened
+
+\`npm install -g hoipippeloi/righthand-cli.dev\` succeeded but every \`righthand\` call threw at startup:
+
+\`\`\`
+Error [ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING]: Stripping types is currently
+unsupported for files under node_modules, for ".../node_modules/righthand/bin/righthand.ts"
+\`\`\`
+
+## Root cause
+
+Node's native TypeScript type-stripping (unflagged since Node 22.6+/23+) is **deliberately disabled for any file whose path contains \`node_modules\`**. It's a location guard, not a version gate — the *same* \`.ts\` file runs fine until its path goes under \`node_modules\`. **No flag overrides it** (\`--experimental-strip-types\` is already on by default and still throws; there is no \`--allow\` for it).
+
+The package shipped \`"bin": { "righthand": "./bin/righthand.ts" }\` (a raw \`.ts\`) with no build step, so the global install pointed Node at a \`.ts\` under \`node_modules\` → throws on every call. Dev was unaffected because \`node bin/righthand.ts\` runs from the repo (not under \`node_modules\`).
+
+## Fix
+
+Publish-time per-file compile to \`dist/\` (esbuild, devDep-only) wired to npm \`prepare\`; \`bin\` → \`./dist/cli.js\`. See [[publish-time-build-to-dist-via-npm-prepare]]. Runtime deps stay \`citty\` + \`isomorphic-git\`; cold start actually *improved* (~115ms → ~80ms) because compiled JS skips the stripping pass.
+
+## Rule of thumb
+
+A published npm package's \`bin\`/entry must be \`.js\`. \`.ts\` entries only work for repo-local / \`npm link\`-from-source workflows. If you depend on running TypeScript source, compile for publish — don't ship a transpiler as a runtime dep just to paper over it.
+`,
   "learnings/expensive-commands-can-t-show-then-confirm-via-dispatch-the-.md": `---
 type: Learning
 title: expensive commands can't show-then-confirm via dispatch — the approval gate preempts run()
@@ -1764,6 +1850,8 @@ _Captured learnings will be listed here._
 - [Inline mermaid SVGs fail silently on @import, var(), color-mix() — resolve to explicit hex before embedding](./inline-mermaid-svgs-fail-silently-on-import-var-color-mix-re.md) - When embedding a mermaid-rendered SVG **inline** in an HTML doc (e.g. \`README.html\` built via the \`html-docs\` skill + \`pretty-mermaid\`), the raw SVG is not drop
 - [config set must JSON-coerce arrays/objects — the layered merge silently drops wrong-typed values](./config-set-must-json-coerce-arrays-objects-the-layered-merge.md) - What happened
 - [.righthand/ runtime footprint holds a nested git repo — exclude it when publishing the source repo](./righthand-runtime-footprint-holds-a-nested-git-repo-exclude-.md) - When publishing the **source** repo to GitHub, the project's own \`./.righthand/\` must be gitignored entirely (not committed). It is righthand's runtime footprin
+- [ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING — published bin must be .js, never .ts](./err-unsupported-node-modules-type-stripping-published-bin-mu.md) - What happened
+- [npm git-dependency on Windows installs as a symlink to a deleted temp clone — no dist/, no bin shim](./npm-git-dependency-on-windows-installs-as-a-symlink-to-a-del.md) - What happened
 `,
   "learnings/inline-mermaid-svgs-fail-silently-on-import-var-color-mix-re.md": `---
 type: Learning
@@ -1858,6 +1946,47 @@ I hit this designing \`src/discover.ts\`: I used top-level \`await loadCore()\` 
 **Fix:** replaced TLA with a lazy memoized async init — \`discoverCore()\` returns a cached promise, built on first call; \`getMergedManifest\`/\`findTool\` became \`async\`. Minimal ripple (2 CLI call sites + test loops await).
 
 **Rule of thumb:** in this repo, keep top-level await out of any module reachable from \`test/**\`. Use a memoized \`async function ensureX()\` instead.
+`,
+  "learnings/npm-git-dependency-on-windows-installs-as-a-symlink-to-a-del.md": `---
+type: Learning
+title: npm git-dependency on Windows installs as a symlink to a deleted temp clone — no dist/, no bin shim
+description: What happened
+tags: [npm, distribution, windows, git-dependency, packaging, gotcha]
+timestamp: "2026-07-24T17:59:41.078Z"
+---
+
+# npm git-dependency on Windows installs as a symlink to a deleted temp clone — no dist/, no bin shim
+
+## What happened
+
+\`npm install -g hoipippeloi/righthand-cli.dev\` reported success (57 packages) but \`righthand\` was \`command not found\`. Diagnosis:
+
+- \`npm ls -g\` showed \`righthand@ -> ...\\npm-cache\\_cacache\\tmp\\git-cloneRA3iYd\` — npm installed it as a **symlink** into a temporary \`git-clone*\` directory, and created **no bin shim**.
+- The symlinked package had **no \`dist/\`** — \`prepare\` never produced the compiled output (see [[publish-build-pipeline]]).
+- npm then **cleaned up the temp clone**, leaving a **dangling symlink**. Three leftover \`git-clone*\` dirs in \`_cacache\\tmp\` showed the same cruft from prior attempts.
+
+This is npm's git-dependency flow on Windows: it clones the repo into a \`_cacache/tmp/git-clone*\` dir, symlinks the global install at it, runs lifecycle scripts there, then deletes the temp dir — so a dangling symlink + missing artifacts is the expected failure mode, not a fluke.
+
+## Root cause / why it bites this project
+
+The [[publish-time-build-to-dist-via-npm-prepare-compiled-js-for-n]] pipeline relies on \`prepare\` running inside that temp clone to build \`dist/\`. On the git-dependency path that's unreliable on Windows: the clone can be torn down before/around the build, and \`scripts/build.mjs\` **no-ops when esbuild is unresolvable** (devDeps may not be installed in the temp clone before \`prepare\` runs), so you silently get a package with no \`dist/\` and therefore no working \`bin\`.
+
+## Fix / workaround
+
+- **What we shipped (works WITHOUT the registry): COMMIT \`dist/\` and install via the GitHub *tarball* URL** — \`npm install -g https://github.com/hoipippeloi/righthand-cli.dev/tarball/main\`. A tarball-URL install is a normal package download (no git clone), so it skips the buggy git-dep flow entirely; npm copies the committed \`dist/\` and creates a real bin shim. Confirmed working on npm 11.12.1 / Node 24 / Windows (\`righthand version\` / \`doctor\` / \`tools --json\` all green). \`/tarball/main\` always fetches current main; pin to a release tag for reproducibility.
+- **Prefer the npm registry over a git URL for \`npm i -g\`.** \`npm publish\` runs \`prepare\` locally and ships a packed tarball that already contains a prebuilt \`dist/\`; a registry install copies that tarball and generates a real bin shim — no temp clone, no re-build.
+- If you must install from a git URL, expect the dangling-symlink failure mode: uninstall, clear stale \`_cacache/tmp/git-clone*\` dirs, and verify both the resolved path (a real directory, not a symlink into \`_cacache/tmp\`) and the presence of \`dist/cli.js\` + the bin shim after install.
+- Side note (separate gotcha): git-bash sessions don't always have the npm global bin dir on \`PATH\` — run via the full bin path or fix PATH if \`command not found\` is the only symptom.
+
+## Rule of thumb
+
+A git-URL global install on Windows is a *different code path* from a registry install: it re-clones + re-runs \`prepare\` in a throwaway temp dir it later deletes. For any package whose \`bin\` depends on a \`prepare\`-built artifact, ship via the registry and treat git-URL installs as dev-only / \`npm link\`-from-source territory.
+
+## Related
+
+- [[publish-build-pipeline]] — the entity this breaks when \`prepare\` doesn't run / no-ops.
+- [[publish-time-build-to-dist-via-npm-prepare-compiled-js-for-n]] — the decision that made \`dist/\` build-on-prepare (its "\`npm install -g <git-url>\` now works" claim is true for a clean registry-style install but not guaranteed for the Windows git-dependency path).
+- [[err-unsupported-node-modules-type-stripping-published-bin-must-be-js-never-ts]] — the prior failure mode this whole build pipeline exists to fix.
 `,
   "learnings/operational-task-failure-modes-of-coding-agents.md": `---
 type: Learning
@@ -2172,12 +2301,20 @@ implementation specs; \`research_righthand_problem/\` for the evidence base.
 ## Runtime & toolchain
 
 - **Node + TypeScript, Bun-compatible** (runtime-agnostic JS; no Bun-only APIs).
-- **No build step** — Node 22+/24 strips TS types natively; Bun runs \`.ts\` as-is.
-  Source must stay strip-only-clean: **no parameter properties, enums, or
-  namespaces** (see [[node-strip-only-typescript-rejects-parameter-properties-enum]]).
+- **No build step for dev** — Node 22+/24 strips TS types natively; Bun runs \`.ts\`
+  as-is, so \`node bin/righthand.ts\` runs source directly. Source must stay
+  strip-only-clean: **no parameter properties, enums, or namespaces** (see
+  [[node-strip-only-typescript-rejects-parameter-properties-enum]]). The *published
+  npm artifact* is the one exception — compiled to \`dist/\` JS via \`npm prepare\`
+  (esbuild, devDep-only), because Node refuses to type-strip any \`.ts\` whose path
+  is under \`node_modules\` ([[publish-time-build-to-dist-via-npm-prepare-compiled-js-for-n]],
+  [[err-unsupported-node-modules-type-stripping-published-bin-must-be-js-never-ts]]).
 - **CLI layer:** \`citty\`. **Tests:** \`npm test\` (= \`node --test\`, auto-discovers
-  \`test/**/*.test.ts\`). **Only runtime deps:** \`citty\` + \`isomorphic-git\`.
-- Cold-start of \`righthand tools\` ≈ **115ms** (under the 200ms C1 bar).
+  \`test/**/*.test.ts\`). **Only runtime deps:** \`citty\` + \`isomorphic-git\`
+  (\`esbuild\` is devDep-only, for the publish build).
+- Cold-start of \`righthand tools\` ≈ **80ms compiled (\`dist/\`)** / ~115ms from
+  source — both under the 200ms C1 bar
+  ([[lock-success-criteria-measurable-metrics-never-break-bars]]).
 
 ## The shared contracts (in \`src/contracts.ts\`)
 
@@ -2197,7 +2334,9 @@ implementation specs; \`research_righthand_problem/\` for the evidence base.
 - \`src/discover.ts\` — **auto-discovery**: scans \`src/commands/*.ts\` (core) +
   footprint command dirs (\`./.righthand/commands\`, \`~/.righthand/commands\`) +
   plugin manifest fragments. Adding a command = drop a file; **no shared-file
-  edits** ([[command-auto-discovery-one-file-per-command-plugin-handlers]]).
+  edits** ([[command-auto-discovery-one-file-per-command-plugin-handlers-]]).
+  Location-aware via \`import.meta.url\`, so it finds \`src/commands/*.ts\` in dev and
+  \`dist/commands/*.js\` once compiled ([[publish-time-build-to-dist-via-npm-prepare-compiled-js-for-n]]).
 - \`src/runtime.ts\` — dispatch: manifest lookup → capability check (exit 6 on
   deny) → approval gate (destructive/expensive need \`--yes\`) → run handler →
   history append.
@@ -2228,7 +2367,7 @@ implementation specs; \`research_righthand_problem/\` for the evidence base.
 \`llm ask\`, \`build\` (C5 self-builder), \`research\` (C6), \`doctor\` (C10), and the
 ops domains: \`ci\`, \`logs\`, \`docs\`, \`tasks\`, \`admin\` (C8), plus \`hello\` (demo) and \`web\` (visual command runner).
 
-## Capabilities map (all 10 built, 173 tests)
+## Capabilities map (all 10 built, 174 tests)
 
 C1 Core Runtime · C2 Plugin System · C3 Authoring/Scaffolder · C4 LLM Providers ·
 C5 Self-Builder · C6 Research · C7 Rollback/Reset · C8 Ops Domains · C9
@@ -2238,7 +2377,7 @@ trust foundation it depends on.
 ## How to use
 
 \`\`\`bash
-node bin/righthand.ts                 # list commands
+node bin/righthand.ts                 # list commands (runs TS source directly)
 node bin/righthand.ts tools --json    # MCP-shaped discovery for agents
 node bin/righthand.ts init            # create ./.righthand footprint
 node bin/righthand.ts new mycmd       # scaffold a command (auto-discovered)
@@ -2246,7 +2385,8 @@ node bin/righthand.ts build "..."     # LLM writes a new command (needs --yes + 
 node bin/righthand.ts doctor          # health/config diagnostics
 node bin/righthand.ts rollback --yes  # undo the last change
 node bin/righthand.ts web            # visual command-runner webapp (opens browser)
-righthand <command>                  # once \`npm link\`-ed, runs globally from anywhere
+npm run build                         # compile src/ → dist/ (also runs on \`npm prepare\`)
+righthand <command>                  # once \`npm i -g\`-ed, runs the compiled binary
 \`\`\`
 
 Capability-gated commands (\`ci\`, \`llm\`, \`build\`, \`research\`, …) are
@@ -2269,6 +2409,40 @@ _Documents, diagrams, and deliverables will be listed here._
 - [righthand PRD](./righthand-prd.md) - The authoritative product-definition document for the righthand initiative, produced via the \`new-prd-interview\` skill.
 - [README.html interactive README](./readme-html-interactive-readme.md) - A self-contained, interactive HTML README at the repo root — the rich, visual companion to the shorthand \`README.md\`. Built with the \`html-docs\` skill (feature-
 - [SETUP.md LLM onboarding runbook](./setup-md-llm-onboarding-runbook.md) - \`SETUP.md\` (repo root) is an executable onboarding runbook written **for an LLM agent to follow** — the counterpart to the shorthand \`README.md\` and the interac
+- [llms.txt agent operating instructions](./llms-txt-agent-operating-instructions.md) - \`llms.txt\` (repo root) — a root-level markdown file following the [llms.txt convention](https://llmstxt.org) (well-known root path LLMs are taught to read for p
+`,
+  "pages/artifacts/llms-txt-agent-operating-instructions.md": `---
+type: Artifact
+title: llms.txt agent operating instructions
+description: "\`llms.txt\` (repo root) — a root-level markdown file following the [llms.txt convention](https://llmstxt.org) (well-known root path LLMs are taught to read for p"
+tags: [llms-txt, artifact, llm-coupling, agent-instructions, docs]
+timestamp: "2026-07-24T17:26:21.435Z"
+---
+
+# llms.txt agent operating instructions
+
+\`llms.txt\` (repo root) — a root-level markdown file following the [llms.txt convention](https://llmstxt.org) (well-known root path LLMs are taught to read for project context), but deliberately framed as **operating instructions for the coding LLM**, not project documentation. Its entire job: sit in the main LLM's context window and teach it to **delegate operational work to righthand by default** instead of dragging logs/CI output into its own context.
+
+## What it documents
+
+- [righthand-cli](./righthand-cli.md) — what righthand is and why this file exists (the framing: righthand is the thing this repo ships; this file teaches treating it as an operations subprocess).
+- **The core delegation rule** — any operational task (CI, logs, issues, docs, tasks, env, web lookups) → call righthand, read its one-line \`summary\`, carry on. Explicitly names when NOT to use it (editing/reading source).
+- [command-output-envelope-and-exit-codes](./command-output-envelope-and-exit-codes.md) — the JSON envelope shape, exit codes, "always \`--json\`".
+- The **21-command surface** (grouped: ci/logs/docs/tasks/admin, llm/research, build/new/plugins, system).
+- **Three tight-coupling patterns** for the agent: (1) *enumerate once, then dispatch* via \`righthand tools --json\` (MCP-shaped descriptors), (2) *trust the summary, drop the rest*, (3) *grow the surface on demand* via \`build\` (see [self-extending-safe-undo-loop](./self-extending-safe-undo-loop.md)).
+- [plugin-sandbox-capability-declaration-permission-flags-subpr](./plugin-sandbox-capability-declaration-permission-flags-subpr.md) — deny-by-default capabilities; [credential-values-use-env-keychain-indirection-never-plainte](./credential-values-use-env-keychain-indirection-never-plainte.md) credential indirection; \`righthand doctor\` to diagnose denials.
+- **Install** (\`npm install -g\`), **status/limits** (v1 baseline: \`keychain:\` resolves to null, no OS-level subprocess isolation, shallow \`--deep\`).
+
+## Details
+
+- **Location**: \`llms.txt\` (repo root). Coexists with \`README.md\` (shorthand, humans) and \`README.html\` (interactive, humans).
+- **Format**: single root-level markdown file per the llms.txt convention; zero runtime deps (it is documentation, not code).
+- **Distinction from siblings**: [readme-html-interactive-readme](./readme-html-interactive-readme.md) and \`README.md\` are human-facing project overviews; [setup-md-llm-onboarding-runbook](./setup-md-llm-onboarding-runbook.md) is a *runbook* an LLM follows to set the project up. \`llms.txt\` is *persistent operating context* — what lives in the agent's window by default once it has read the repo.
+- **Design choice (deliberate)**: no separate \`llms-full.txt\` / \`llms-small.txt\` split and no per-command schema dumps baked in. The file tells the agent to fetch live, always-current descriptors via \`righthand tools --json\` instead. Add the split only if an agent vendor needs statically-baked sections.
+
+## Source
+
+- \`llms.txt\` — the artifact itself (repo root).
 `,
   "pages/artifacts/readme-html-interactive-readme.md": `---
 type: Artifact
@@ -2733,7 +2907,8 @@ _Concrete named things will be listed here._
 y point — \`complete()\` —
 - [plugins command](./plugins-command.md) - What it is
 - [doctor command](./doctor-command.md) - **\`righthand doctor\`** is the read-only health & integration diagnostics command (capability [[c10-diagnostics]] / \`decisions/diagnostics-command-righthand-doct
-- [web command](./web-command.md) - **\`righthand web\`** is the command that launches the visual command-runner webapp. It is a long-running **foreground** command: it starts a stdlib HTTP server, 
+- [web command](./web-command.md) - **\`righthand web\`** is the command that launches the visual command-runner webapp. It is a long-running **foreground** command: it starts a stdlib HTTP server,
+- [Publish build pipeline](./publish-build-pipeline.md) - **The publish build pipeline** compiles the TypeScript source in \`src/\` into ESM JavaScript in \`dist/\` at publish time, so the published npm package's \`bin\` is 
 `,
   "pages/entities/llm-command.md": `---
 type: Entity
@@ -2871,6 +3046,49 @@ Every npm call goes through \`activeNpmRunner()\` in \`src/plugininstall.ts\`: \
 - \`src/plugininstall.ts\` — \`defaultNpmRunner\`/\`setNpmRunnerForTest\`/\`activeNpmRunner\`, \`installPlugin\`/\`uninstallPlugin\`/\`listPlugins\`, \`packageNameFromSpec\`, \`readManifest\`.
 - \`test/plugins.test.ts\` — empty list, install (manifest + no-manifest + dry-run + no-\`--yes\` + npm-failure), remove (+ dry-run), \`packageNameFromSpec\` unit; all via an injected fake npm runner over an isolated temp footprint.
 `,
+  "pages/entities/publish-build-pipeline.md": `---
+type: Entity
+title: Publish build pipeline
+description: **The publish build pipeline** compiles the TypeScript source in \`src/\` into ESM JavaScript in \`dist/\` at publish time, so the published npm package's \`bin\` is 
+tags: [packaging, build, npm, distribution, esbuild]
+timestamp: "2026-07-24T17:55:54.767Z"
+---
+
+# Publish build pipeline
+
+**The publish build pipeline** compiles the TypeScript source in \`src/\` into ESM JavaScript in \`dist/\` at publish time, so the published npm package's \`bin\` is plain \`.js\` (not \`.ts\`). It is the mechanism behind [publish-time-build-to-dist-via-npm-prepare-compiled-js-for-n](./publish-time-build-to-dist-via-npm-prepare-compiled-js-for-n.md) and exists solely because Node refuses to type-strip any \`.ts\` whose path is under \`node_modules\` ([err-unsupported-node-modules-type-stripping-published-bin-must-be-js-never-ts](./err-unsupported-node-modules-type-stripping-published-bin-mu.md)).
+
+Dev is untouched: \`node bin/righthand.ts\` still runs source directly ([no-build-step-run-typescript-source-directly](./no-build-step-run-typescript-source-directly.md)). The build runs only on publish / \`npm pack\` / git install, never on a consumer registry install.
+
+## Details
+
+- **Location**: \`scripts/build.mjs\` (the compiler) + the \`prepare\`/\`build\` npm scripts in \`package.json\`; output \`dist/\` (gitignored build artifact, listed in \`files\`).
+- **Interface / npm scripts**:
+  - \`npm run build\` → \`node scripts/build.mjs\`
+  - \`npm prepare\` → same (runs automatically on \`npm pack\`, \`npm publish\`, and \`npm install <git-url>\`, so the tarball always ships a prebuilt \`dist/\`).
+  - \`bin.righthand\` → \`./dist/cli.js\` (the published entry).
+- **Compiler**: \`esbuild\` (\`transform\`, per-file) — a **devDependency only**. Runtime deps stay \`citty\` + \`isomorphic-git\`. If esbuild is unresolvable (e.g. \`prepare\` runs where devDeps are absent), \`build.mjs\` **no-ops** — the tarball must already contain a prebuilt \`dist/\`.
+- **What it does, step by step**: wipe \`dist/\`; walk \`src/\`; \`transform\` each \`.ts\` 1:1 to \`.js\` (target \`node20\`, ESM); rewrite relative import specifiers \`.ts\`→\`.js\` (scoped regex — skips bare \`.ts\`/\`"cmd.ts"\` runtime logic); prepend the shebang to \`cli.ts\`→\`cli.js\`; copy non-TS assets verbatim (currently only \`src/web/app.html\`, which \`src/web/server.ts\` reads \`HERE\`-relative via \`import.meta.url\`).
+- **Per-file, not bundled** — load-bearing: [command-auto-discovery-one-file-per-command-plugin-handlers-](./command-auto-discovery-one-file-per-command-plugin-handlers.md) dynamically \`import()\`s command files discovered at runtime; bundling can't see them. A one-line \`src/discover.ts\` change (accept \`.ts\`||\`.js\`; \`import.meta.url\` resolves \`HERE\` to \`src/\` in dev, \`dist/\` compiled) keeps a single discovery path working in both.
+
+## Relationships
+
+- [publish-time-build-to-dist-via-npm-prepare-compiled-js-for-n](./publish-time-build-to-dist-via-npm-prepare-compiled-js-for-n.md) — the decision this implements (the *why*: per-file vs bundle, alternatives rejected).
+- [no-build-step-run-typescript-source-directly](./no-build-step-run-typescript-source-directly.md) — the dev principle this pipeline is the *single exception* to (publish only).
+- [command-auto-discovery-one-file-per-command-plugin-handlers-](./command-auto-discovery-one-file-per-command-plugin-handlers.md) — the constraint that forces per-file compile over bundling.
+- [lock-success-criteria-measurable-metrics-never-break-bars](./lock-success-criteria-measurable-metrics-never-break-bars.md) — defended: compiled cold-start ≈80ms (vs ~115ms source), under the 200ms bar.
+
+## Lifecycle
+
+- **First added: 2026-07-24** — to fix \`npm install -g hoipippeloi/righthand-cli.dev\` crashing on every call (\`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING\`). Commit \`181404b\` (code) + \`4eef979\` (docs).
+- **Known follow-up**: a single-file bundle build is a possible later optimization (would need replacing dynamic discovery with a static import map); deferred — per-file already improved cold start.
+
+## Source
+
+- \`scripts/build.mjs\` — the compiler (per-file, scoped specifier rewrite, no-op fallback).
+- \`package.json\` — \`bin\`, \`files: ["dist"]\`, \`prepare\`/\`build\` scripts, \`esbuild\` devDep.
+- \`src/discover.ts\` — location-aware core command discovery (the one-line \`.ts\`||\`.js\` change).
+`,
   "pages/entities/righthand-cli.md": `---
 type: Entity
 title: righthand cli
@@ -2993,6 +3211,8 @@ y point — \`complete()\` —
 - [web command](./entities/web-command.md) — **\`righthand web\`** is the command that launches the visual command-runner webapp. It is a long-running **foreground** command: it starts a stdlib HTTP server,
 - [README.html interactive README](./artifacts/readme-html-interactive-readme.md) — A self-contained, interactive HTML README at the repo root — the rich, visual companion to the shorthand \`README.md\`. Built with the \`html-docs\` skill (feature-
 - [SETUP.md LLM onboarding runbook](./artifacts/setup-md-llm-onboarding-runbook.md) — \`SETUP.md\` (repo root) is an executable onboarding runbook written **for an LLM agent to follow** — the counterpart to the shorthand \`README.md\` and the interac
+- [llms.txt agent operating instructions](./artifacts/llms-txt-agent-operating-instructions.md) — \`llms.txt\` (repo root) — a root-level markdown file following the [llms.txt convention](https://llmstxt.org) (well-known root path LLMs are taught to read for p
+- [Publish build pipeline](./entities/publish-build-pipeline.md) — **The publish build pipeline** compiles the TypeScript source in \`src/\` into ESM JavaScript in \`dist/\` at publish time, so the published npm package's \`bin\` is 
 `,
   "pages/TEMPLATES.md": `---
 type: Concept
@@ -3281,6 +3501,7 @@ var WIKI_PAGES = [
     { path: "decisions/node-typescript-is-the-runtime-for-righthand.md", label: "Node + TypeScript is the runtime for righthand", group: "Decisions" },
     { path: "decisions/plugin-sandbox-capability-declaration-permission-flags-subpr.md", label: "Plugin sandbox: capability declaration + permission flags, subprocess isolation for untrusted", group: "Decisions" },
     { path: "decisions/project-scoped-footprint-with-config-layering.md", label: "Project-scoped footprint with config layering", group: "Decisions" },
+    { path: "decisions/publish-time-build-to-dist-via-npm-prepare-compiled-js-for-n.md", label: "Publish-time build to dist/ via npm prepare (compiled JS for npm, source for dev)", group: "Decisions" },
     { path: "decisions/research-backend-is-llm-driven-not-a-hard-coupled-search-api.md", label: "Research backend is LLM-driven, not a hard-coupled search API", group: "Decisions" },
     { path: "decisions/righthand-core-architecture.md", label: "righthand core architecture", group: "Decisions" },
     { path: "decisions/rollback-and-reset-capability-c-reset.md", label: "Rollback and reset capability (C-RESET)", group: "Decisions" },
@@ -3295,12 +3516,14 @@ var WIKI_PAGES = [
     { path: "learnings/bun-compile-binaries-are-58-109mb-crust-js-is-alpha-stage.md", label: "Bun --compile binaries are 58–109MB; crust.js is alpha-stage", group: "Learnings" },
     { path: "learnings/cold-start-177ms-after-discovery-isomorphic-git-kept-off-the.md", label: "Cold-start ~177ms after discovery; isomorphic-git kept off the cold path", group: "Learnings" },
     { path: "learnings/config-set-must-json-coerce-arrays-objects-the-layered-merge.md", label: "config set must JSON-coerce arrays/objects — the layered merge silently drops wrong-typed values", group: "Learnings" },
+    { path: "learnings/err-unsupported-node-modules-type-stripping-published-bin-mu.md", label: "ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING — published bin must be .js, never .ts", group: "Learnings" },
     { path: "learnings/expensive-commands-can-t-show-then-confirm-via-dispatch-the-.md", label: "expensive commands can't show-then-confirm via dispatch — the approval gate preempts run()", group: "Learnings" },
     { path: "learnings/inline-mermaid-svgs-fail-silently-on-import-var-color-mix-re.md", label: "Inline mermaid SVGs fail silently on @import, var(), color-mix() — resolve to explicit hex before embedding", group: "Learnings" },
     { path: "learnings/index.md", label: "Learnings", group: "Learnings" },
     { path: "learnings/net-llm-capability-gate-llm-commands-are-denied-before-run-u.md", label: "net:llm capability gate: llm commands are denied before run() unless allowed", group: "Learnings" },
     { path: "learnings/node-test-rejects-top-level-await-anywhere-in-the-import-gra.md", label: "node --test rejects top-level await anywhere in the import graph", group: "Learnings" },
     { path: "learnings/node-strip-only-typescript-rejects-parameter-properties-enum.md", label: "Node strip-only TypeScript rejects parameter properties, enums, and namespaces", group: "Learnings" },
+    { path: "learnings/npm-git-dependency-on-windows-installs-as-a-symlink-to-a-del.md", label: "npm git-dependency on Windows installs as a symlink to a deleted temp clone — no dist/, no bin shim", group: "Learnings" },
     { path: "learnings/operational-task-failure-modes-of-coding-agents.md", label: "Operational-task failure modes of coding agents", group: "Learnings" },
     { path: "learnings/ops-commands-declaring-capabilities-are-capability-gated-bef.md", label: "Ops commands declaring capabilities are capability-gated before they run — tests must grant caps", group: "Learnings" },
     { path: "learnings/parallel-agents-against-one-repo-report-unreliable-test-coun.md", label: "Parallel agents against one repo report unreliable test counts", group: "Learnings" },
@@ -3310,6 +3533,7 @@ var WIKI_PAGES = [
     { path: "pages/TEMPLATES.md", label: "Page Templates", group: "Pages" },
     { path: "pages/index.md", label: "Pages", group: "Pages" },
     { path: "pages/artifacts/index.md", label: "Artifacts", group: "Pages / Artifacts" },
+    { path: "pages/artifacts/llms-txt-agent-operating-instructions.md", label: "llms.txt agent operating instructions", group: "Pages / Artifacts" },
     { path: "pages/artifacts/readme-html-interactive-readme.md", label: "README.html interactive README", group: "Pages / Artifacts" },
     { path: "pages/artifacts/righthand-cli-prd.md", label: "righthand CLI PRD", group: "Pages / Artifacts" },
     { path: "pages/artifacts/righthand-prd.md", label: "righthand PRD", group: "Pages / Artifacts" },
@@ -3326,6 +3550,7 @@ var WIKI_PAGES = [
     { path: "pages/entities/llm-command.md", label: "llm command", group: "Pages / Entities" },
     { path: "pages/entities/llm-provider-integration.md", label: "LLM provider integration", group: "Pages / Entities" },
     { path: "pages/entities/plugins-command.md", label: "plugins command", group: "Pages / Entities" },
+    { path: "pages/entities/publish-build-pipeline.md", label: "Publish build pipeline", group: "Pages / Entities" },
     { path: "pages/entities/righthand-cli.md", label: "righthand cli", group: "Pages / Entities" },
     { path: "pages/entities/web-command.md", label: "web command", group: "Pages / Entities" },
     { path: "preferences/index.md", label: "Preferences", group: "Preferences" },
